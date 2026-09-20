@@ -1028,7 +1028,9 @@
       return;
     }
     const d = new Date(currentSessionCreatedAt);
-    el.textContent = `Í gangi frá ${d.toLocaleDateString('is-IS', { day: 'numeric', month: 'long' })}`;
+    const dateStr = d.toLocaleDateString('is-IS', { day: 'numeric', month: 'long' });
+    const timeStr = d.toLocaleTimeString('is-IS', { hour: '2-digit', minute: '2-digit' });
+    el.textContent = `Í gangi frá ${dateStr}, kl. ${timeStr}`;
   }
 
   let historySessionsCache = [];
@@ -1038,9 +1040,12 @@
     const select = document.getElementById('history-select');
     historySessionsCache = await loadSessionHistory();
     select.innerHTML = '<option value="">Veldu kvöld...</option>' + historySessionsCache.map((s) => {
-      const dateStr = s.createdAt
-        ? new Date(s.createdAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
-        : '?';
+      let dateStr = '?';
+      if (s.createdAt) {
+        const d = new Date(s.createdAt);
+        dateStr = d.toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
+          + ', kl. ' + d.toLocaleTimeString('is-IS', { hour: '2-digit', minute: '2-digit' });
+      }
       return `<option value="${s.id}">${dateStr}${s.id === currentSessionId ? ' — núverandi' : ''}</option>`;
     }).join('');
   }

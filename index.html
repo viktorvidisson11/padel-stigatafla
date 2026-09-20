@@ -152,6 +152,17 @@
     font-weight: 600;
   }
 
+  .stats-subhead {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    margin: 16px 0 8px;
+  }
+
+  .stats-subhead:first-child { margin-top: 0; }
+
   .session-info {
     margin: 0 0 10px;
     color: var(--muted);
@@ -160,42 +171,6 @@
 
   .history-list {
     margin-top: 10px;
-  }
-
-  .history-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.88rem;
-  }
-
-  .history-row:last-child { border-bottom: none; }
-
-  .history-view-btn {
-    flex: none;
-    padding: 6px 10px;
-    font-size: 0.78rem;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--surface-alt);
-    color: var(--ink);
-    font-family: inherit;
-    cursor: pointer;
-  }
-
-  .history-back-btn {
-    margin-bottom: 8px;
-    padding: 6px 10px;
-    font-size: 0.78rem;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--surface-alt);
-    color: var(--ink);
-    font-family: inherit;
-    cursor: pointer;
   }
 
   .setup-row {
@@ -211,33 +186,6 @@
   .setup-label {
     font-size: 0.92rem;
     font-weight: 600;
-  }
-
-  .stepper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .stepper-btn {
-    width: 34px;
-    height: 34px;
-    border-radius: 50%;
-    border: 1px solid var(--line);
-    background: var(--surface-alt);
-    color: var(--ink);
-    font-size: 1.1rem;
-    font-weight: 700;
-    line-height: 1;
-    cursor: pointer;
-  }
-
-  .stepper-value {
-    font-family: "Oswald", sans-serif;
-    font-size: 1.1rem;
-    font-weight: 600;
-    min-width: 20px;
-    text-align: center;
   }
 
   .rc-input {
@@ -266,32 +214,80 @@
     cursor: pointer;
   }
 
-  .players-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-    gap: 8px;
+  .roster-checklist {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 4px;
   }
 
-  .players-grid input {
-    width: 100%;
-    padding: 9px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--line);
-    background: var(--surface-alt);
-    color: var(--ink);
+  .roster-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
     font-size: 0.92rem;
-    font-family: inherit;
-    min-height: 40px;
+    cursor: pointer;
   }
 
-  .players-grid input:focus {
-    outline: 2px solid var(--accent);
-    outline-offset: -1px;
+  .roster-row:last-child { border-bottom: none; }
+
+  .roster-row input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent);
+    flex-shrink: 0;
   }
 
-  .players-grid input::placeholder {
+  .empty-hint {
     color: var(--muted);
-    opacity: 1;
+    font-size: 0.85rem;
+    margin: 0 0 8px;
+  }
+
+  .add-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .add-row input {
+    flex: 1;
+    text-align: left;
+    width: auto;
+  }
+
+  .add-row button {
+    flex: none;
+    padding: 9px 12px;
+  }
+
+  .guest-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 0;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px 4px 10px;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--line);
+    font-size: 0.85rem;
+  }
+
+  .chip button {
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 0 2px;
   }
 
   .leaderboard {
@@ -352,6 +348,24 @@
     height: 100%;
     border-radius: 999px;
     background: var(--accent);
+  }
+
+  .nem-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.9rem;
+  }
+
+  .nem-row:last-child { border-bottom: none; }
+
+  .nem-detail {
+    color: var(--muted);
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 
   .next-card {
@@ -627,37 +641,48 @@
     <p id="session-info" class="session-info"></p>
     <div class="toolbar" style="margin-top:0;">
       <button class="btn reshuffle" id="new-session-btn" type="button">Nýtt kvöld</button>
-      <button class="btn" id="history-btn" type="button">Fyrri kvöld</button>
+    </div>
+    <div class="setup-row" style="margin-top:10px;">
+      <span class="setup-label">Fyrri kvöld</span>
+      <select id="history-select" class="rc-input" style="width:auto;min-width:150px;text-align:left;">
+        <option value="">Veldu kvöld...</option>
+      </select>
     </div>
     <div id="history-list" class="history-list" hidden></div>
   </section>
 
+  <section class="card" id="stats-card">
+    <h2 class="label">Tölfræði — allt tímabilið</h2>
+    <button class="btn" id="load-stats-btn" type="button">Sækja tölfræði</button>
+    <div id="stats-content" hidden></div>
+  </section>
+
   <section class="card" id="setup-card">
-    <h2 class="label">Uppsetning</h2>
-    <div class="setup-row">
-      <span class="setup-label">Leikmenn</span>
-      <div class="stepper">
-        <button class="stepper-btn" id="pc-minus" aria-label="Fækka leikmönnum" type="button">−</button>
-        <span class="stepper-value" id="pc-value">5</span>
-        <button class="stepper-btn" id="pc-plus" aria-label="Fjölga leikmönnum" type="button">+</button>
-      </div>
+    <h2 class="label">Hverjir spila í kvöld?</h2>
+    <div class="roster-checklist" id="roster-checklist"></div>
+    <div class="add-row">
+      <input type="text" id="new-roster-name" placeholder="Nýr fastur leikmaður" maxlength="24">
+      <button class="btn" id="add-roster-btn" type="button">Bæta við</button>
     </div>
-    <div class="setup-row">
+
+    <h2 class="label" style="margin-top:16px;">Gestir í kvöld</h2>
+    <div class="guest-chips" id="guest-chips"></div>
+    <div class="add-row">
+      <input type="text" id="new-guest-name" placeholder="Nafn gests" maxlength="24">
+      <button class="btn" id="add-guest-btn" type="button">Bæta við gesti</button>
+    </div>
+
+    <div class="setup-row" style="margin-top:16px;">
       <span class="setup-label">Fjöldi leikja</span>
       <input type="number" id="rc-input" class="rc-input" min="1" max="99" value="15" inputmode="numeric">
     </div>
     <button class="apply-btn" id="apply-setup-btn" type="button">Búa til leikjaplan</button>
   </section>
 
-  <section class="card" id="players-card">
-    <h2 class="label">Leikmenn</h2>
-    <div class="players-grid" id="players-grid"></div>
-  </section>
-
   <section id="next-section"></section>
 
   <section class="card" id="standings-card">
-    <h2 class="label">Staðan</h2>
+    <h2 class="label">Staðan í kvöld</h2>
     <div class="leaderboard" id="leaderboard"></div>
   </section>
 
@@ -802,26 +827,31 @@
   }
 
   // ---- State -------------------------------------------------------------
+  //
+  // `players`/`rosterIds` are parallel arrays indexed exactly like the
+  // schedule's team/rest indices. `rosterIds[i]` is the permanent roster
+  // doc id for that slot, or null when it's a one-off guest (or a session
+  // saved before the roster existed) — null slots are excluded from
+  // season-long stats but play normally within their own night.
 
   const LOCAL_KEY = 'padel-live-state';
   const MIN_PLAYERS = 4;
   const MAX_PLAYERS = 12;
 
   function defaultState() {
-    const playerCount = 5;
-    const roundCount = 15;
     return {
-      playerCount,
-      players: Array(playerCount).fill(''),
-      schedule: generateSchedule(playerCount, roundCount),
-      results: Array(roundCount).fill(null),
+      playerCount: 0,
+      players: [],
+      rosterIds: [],
+      schedule: [],
+      results: [],
       finished: false,
     };
   }
 
   function isValidState(raw) {
     return !!raw && typeof raw === 'object'
-      && Number.isInteger(raw.playerCount) && raw.playerCount >= MIN_PLAYERS
+      && Number.isInteger(raw.playerCount) && raw.playerCount >= 0
       && Array.isArray(raw.players) && raw.players.length === raw.playerCount
       && Array.isArray(raw.schedule)
       && Array.isArray(raw.results) && raw.results.length === raw.schedule.length;
@@ -833,9 +863,13 @@
       if (typeof p !== 'string') return '';
       return p === `Leikmaður ${i + 1}` ? '' : p;
     });
+    const rosterIds = Array.isArray(raw.rosterIds) && raw.rosterIds.length === raw.playerCount
+      ? raw.rosterIds.map((id) => (typeof id === 'string' ? id : null))
+      : Array(raw.playerCount).fill(null);
     return {
       playerCount: raw.playerCount,
       players,
+      rosterIds,
       schedule: raw.schedule,
       results: raw.results,
       finished: !!raw.finished,
@@ -893,6 +927,10 @@
   window.addEventListener('error', (e) => showError('Villa: ' + e.message));
   window.addEventListener('unhandledrejection', (e) => showError('Villa: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)));
 
+  function inSetupCard() {
+    return !!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#setup-card'));
+  }
+
   // ---- Shared sessions (Firestore) -------------------------------------
   //
   // One Firestore doc per padel night, under `sessions/{id}`, holding the
@@ -914,11 +952,7 @@
       if (!snap.exists()) return;
       const data = snap.data();
       currentSessionCreatedAt = data.createdAt || currentSessionCreatedAt;
-      const incoming = sanitize(data);
-      // Don't clobber the player-name inputs mid-edit if someone else's
-      // write lands while you're typing.
-      const editingPlayers = document.activeElement && document.activeElement.closest && document.activeElement.closest('#players-grid');
-      state = editingPlayers ? { ...incoming, players: state.players } : incoming;
+      state = sanitize(data);
       try { localStorage.setItem(LOCAL_KEY, JSON.stringify(state)); } catch (e) {}
       renderAll();
       renderSetup();
@@ -953,26 +987,32 @@
         const id = snap.exists() ? snap.data().sessionId : null;
         if (id && id !== currentSessionId) subscribeToSession(id);
       }, (err) => showError('Villa: ' + (err && err.code ? err.code : 'óþekkt')));
+      await populateHistoryDropdown();
     } catch (e) {
       setStatus('Vistað í þessum síma', false);
       showError('Ekki tókst að tengjast: ' + (e && e.code ? e.code : 'óþekkt villa'));
     }
   }
 
+  // Starting a new night keeps whoever played last time checked in (people
+  // usually show up again) but always starts with zero guests — guests are
+  // one-night-only by design.
   async function startNewSession() {
     if (!db) { showError('Þarf nettengingu til að byrja nýtt kvöld'); return; }
     await createNewSession({
       playerCount: state.playerCount,
       players: state.players,
-      schedule: generateSchedule(state.playerCount, state.schedule.length),
-      results: Array(state.schedule.length).fill(null),
+      rosterIds: state.rosterIds,
+      schedule: generateSchedule(state.playerCount, Math.max(state.schedule.length, 1)),
+      results: Array(Math.max(state.schedule.length, 1)).fill(null),
       finished: false,
     });
+    await populateHistoryDropdown();
   }
 
   async function loadSessionHistory() {
     if (!db) return [];
-    const q = query(collection(db, 'sessions'), orderBy('createdAt', 'desc'), limit(20));
+    const q = query(collection(db, 'sessions'), orderBy('createdAt', 'desc'), limit(50));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   }
@@ -991,44 +1031,200 @@
     el.textContent = `Í gangi frá ${d.toLocaleDateString('is-IS', { day: 'numeric', month: 'long' })}`;
   }
 
-  function renderHistoryList(sessions) {
-    const box = document.getElementById('history-list');
-    if (!sessions.length) {
-      box.innerHTML = '<p style="color:var(--muted);font-size:0.82rem;margin:0;">Engin fyrri kvöld fundust.</p>';
-      return;
-    }
-    box.innerHTML = sessions.map((s) => {
+  let historySessionsCache = [];
+
+  async function populateHistoryDropdown() {
+    if (!db) return;
+    const select = document.getElementById('history-select');
+    historySessionsCache = await loadSessionHistory();
+    select.innerHTML = '<option value="">Veldu kvöld...</option>' + historySessionsCache.map((s) => {
       const dateStr = s.createdAt
         ? new Date(s.createdAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
         : '?';
-      const isCurrent = s.id === currentSessionId;
-      return `
-        <div class="history-row">
-          <span>${dateStr}${isCurrent ? ' <strong>(núverandi)</strong>' : ''}</span>
-          ${isCurrent ? '' : `<button class="history-view-btn" data-view-session="${s.id}" type="button">Skoða stöðu</button>`}
-        </div>
-      `;
+      return `<option value="${s.id}">${dateStr}${s.id === currentSessionId ? ' — núverandi' : ''}</option>`;
     }).join('');
-    box.querySelectorAll('[data-view-session]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const s = sessions.find((x) => x.id === btn.dataset.viewSession);
-        const rows = computeStandingsFor(s).sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
-        const labels = rankLabels(rows);
-        box.innerHTML = `
-          <button class="history-back-btn" id="back-to-history" type="button">← Til baka</button>
-          ${rows.map((r, i) => `
-            <div class="lb-row">
-              <div class="lb-rank">${labels[i]}</div>
-              <div class="lb-name">${escapeHtml(r.name)}</div>
-              <div></div>
-              <div class="lb-record">${r.wins}&nbsp;/&nbsp;${r.played}</div>
-            </div>
-          `).join('')}
-        `;
-        document.getElementById('back-to-history').addEventListener('click', () => renderHistoryList(sessions));
+  }
+
+  document.getElementById('history-select').addEventListener('change', (e) => {
+    const box = document.getElementById('history-list');
+    const id = e.target.value;
+    if (!id) { box.hidden = true; return; }
+    const s = historySessionsCache.find((x) => x.id === id);
+    if (!s) return;
+    box.hidden = false;
+    const rows = computeStandingsFor(sanitize(s)).sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
+    const labels = rankLabels(rows);
+    box.innerHTML = rows.map((r, i) => `
+      <div class="lb-row">
+        <div class="lb-rank">${labels[i]}</div>
+        <div class="lb-name">${escapeHtml(r.name)}</div>
+        <div></div>
+        <div class="lb-record">${r.wins}&nbsp;/&nbsp;${r.played}</div>
+      </div>
+    `).join('');
+  });
+
+  // ---- Player roster -----------------------------------------------------
+  //
+  // Permanent list of regular players, separate from any one night's
+  // attendance. Lives in its own Firestore collection so it's shared and
+  // stays in sync live (someone adding a new regular shows up for everyone
+  // immediately).
+
+  let rosterCache = [];
+
+  function subscribeRoster() {
+    if (!db) return;
+    onSnapshot(collection(db, 'roster'), (snap) => {
+      rosterCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
+      renderRosterChecklist();
+    }, (err) => showError('Leikmannahópur: ' + (err && err.code ? err.code : 'óþekkt villa')));
+  }
+
+  function rosterName(id) {
+    const p = rosterCache.find((x) => x.id === id);
+    return p ? p.name : '??';
+  }
+
+  // ---- Season-long stats ---------------------------------------------
+  //
+  // Scans every session that has recorded rosterIds and tallies, per
+  // registered player: overall win rate, partnership win rate (to find
+  // the best team even if no single player on it has the most total
+  // wins), and a "nemesis" — the specific opponent who beats them the
+  // most often, which can surface fun asymmetries a simple overall
+  // ranking hides (e.g. a bottom-of-the-table player who nonetheless
+  // has your number).
+  async function computeSeasonStats() {
+    const snap = await getDocs(collection(db, 'sessions'));
+    const playerAgg = {};
+    const pairAgg = {};
+    const nemesis = {};
+
+    function ensurePlayer(id) {
+      if (!playerAgg[id]) playerAgg[id] = { wins: 0, played: 0 };
+    }
+    function ensureNemesisPair(x, y) {
+      if (!nemesis[x]) nemesis[x] = {};
+      if (!nemesis[x][y]) nemesis[x][y] = { gamesAgainst: 0, lossesToOpp: 0 };
+    }
+
+    snap.forEach((docSnap) => {
+      const s = docSnap.data();
+      if (!Array.isArray(s.rosterIds) || !Array.isArray(s.schedule) || !Array.isArray(s.results)) return;
+      s.schedule.forEach((r, i) => {
+        const result = s.results[i];
+        if (result !== 'A' && result !== 'B') return;
+        const teamA = r.teamA.map((idx) => s.rosterIds[idx]);
+        const teamB = r.teamB.map((idx) => s.rosterIds[idx]);
+        const winners = result === 'A' ? teamA : teamB;
+
+        [...teamA, ...teamB].forEach((id) => { if (id) { ensurePlayer(id); playerAgg[id].played += 1; } });
+        winners.forEach((id) => { if (id) playerAgg[id].wins += 1; });
+
+        [teamA, teamB].forEach((team) => {
+          if (team[0] && team[1]) {
+            const key = pairKey(team[0], team[1]);
+            if (!pairAgg[key]) pairAgg[key] = { wins: 0, played: 0, a: team[0], b: team[1] };
+            pairAgg[key].played += 1;
+            if (team === winners) pairAgg[key].wins += 1;
+          }
+        });
+
+        // Only track a nemesis relationship when BOTH players are tracked
+        // roster members — an untracked guest opponent can't be named.
+        teamA.forEach((x) => {
+          teamB.forEach((y) => {
+            if (!x || !y) return;
+            ensureNemesisPair(x, y); nemesis[x][y].gamesAgainst += 1; if (result === 'B') nemesis[x][y].lossesToOpp += 1;
+            ensureNemesisPair(y, x); nemesis[y][x].gamesAgainst += 1; if (result === 'A') nemesis[y][x].lossesToOpp += 1;
+          });
+        });
       });
     });
+
+    return { playerAgg, pairAgg, nemesis };
   }
+
+  function renderSeasonStats({ playerAgg, pairAgg, nemesis }) {
+    const box = document.getElementById('stats-content');
+    box.hidden = false;
+
+    const playerRows = Object.entries(playerAgg)
+      .filter(([, v]) => v.played > 0)
+      .map(([id, v]) => ({ id, name: rosterName(id), wins: v.wins, played: v.played, pct: v.wins / v.played }))
+      .sort((a, b) => b.pct - a.pct);
+
+    const pairRows = Object.values(pairAgg)
+      .map((v) => ({ names: `${rosterName(v.a)} & ${rosterName(v.b)}`, wins: v.wins, played: v.played, pct: v.wins / v.played }))
+      .sort((a, b) => b.pct - a.pct);
+
+    const nemesisRows = playerRows.map((p) => {
+      const opps = nemesis[p.id] || {};
+      let worst = null;
+      Object.entries(opps).forEach(([oppId, v]) => {
+        if (v.gamesAgainst < 1) return;
+        const rate = v.lossesToOpp / v.gamesAgainst;
+        if (!worst || rate > worst.rate || (rate === worst.rate && v.gamesAgainst > worst.games)) {
+          worst = { oppId, rate, games: v.gamesAgainst };
+        }
+      });
+      return {
+        name: p.name,
+        nemesisName: worst ? rosterName(worst.oppId) : null,
+        rate: worst ? worst.rate : 0,
+        games: worst ? worst.games : 0,
+      };
+    });
+
+    if (!playerRows.length) {
+      box.innerHTML = '<p class="empty-hint">Engin gögn ennþá — tölfræðin fyllist út eftir því sem leikir eru skráðir.</p>';
+      return;
+    }
+
+    box.innerHTML = `
+      <h3 class="stats-subhead">Sigurhlutfall leikmanna</h3>
+      ${playerRows.map((p, i) => `
+        <div class="lb-row ${i === 0 ? 'first' : ''}">
+          <div class="lb-rank">${i + 1}.</div>
+          <div class="lb-name">${escapeHtml(p.name)}</div>
+          <div></div>
+          <div class="lb-record">${Math.round(p.pct * 100)}%&nbsp;(${p.wins}/${p.played})</div>
+        </div>
+      `).join('')}
+
+      <h3 class="stats-subhead">Besta liðið saman</h3>
+      ${pairRows.length ? pairRows.slice(0, 5).map((p, i) => `
+        <div class="lb-row ${i === 0 ? 'first' : ''}">
+          <div class="lb-rank">${i + 1}.</div>
+          <div class="lb-name">${escapeHtml(p.names)}</div>
+          <div></div>
+          <div class="lb-record">${Math.round(p.pct * 100)}%&nbsp;(${p.wins}/${p.played})</div>
+        </div>
+      `).join('') : '<p class="empty-hint">Engin gögn ennþá.</p>'}
+
+      <h3 class="stats-subhead">Erkióvinur hvers og eins</h3>
+      ${nemesisRows.map((p) => `
+        <div class="nem-row">
+          <span>${escapeHtml(p.name)}</span>
+          <span class="nem-detail">${p.nemesisName ? `${escapeHtml(p.nemesisName)} — ${Math.round(p.rate * 100)}% af ${p.games}` : '—'}</span>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  document.getElementById('load-stats-btn').addEventListener('click', async () => {
+    if (!db) { showError('Þarf nettengingu fyrir tölfræði'); return; }
+    const box = document.getElementById('stats-content');
+    box.hidden = false;
+    box.innerHTML = '<p class="empty-hint">Reikna...</p>';
+    try {
+      const agg = await computeSeasonStats();
+      renderSeasonStats(agg);
+    } catch (e) {
+      box.innerHTML = '<p class="empty-hint">Ekki tókst að sækja tölfræði.</p>';
+    }
+  });
 
   function playerName(idx) {
     const raw = state.players[idx];
@@ -1050,34 +1246,7 @@
     return state.results.some((r) => r !== null);
   }
 
-  // ---- Rendering -----------------------------------------------------
-
-  function renderPlayers() {
-    const grid = document.getElementById('players-grid');
-    if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#players-grid')) return;
-    grid.innerHTML = '';
-    for (let idx = 0; idx < state.playerCount; idx++) {
-      const input = document.createElement('input');
-      input.type = 'text';
-      input.value = state.players[idx] || '';
-      input.placeholder = `Leikmaður ${idx + 1}`;
-      input.maxLength = 24;
-      input.setAttribute('aria-label', `Nafn leikmanns ${idx + 1}`);
-      input.addEventListener('input', (e) => {
-        state.players[idx] = e.target.value;
-        renderNext();
-        renderStandings();
-        renderSchedule();
-        clearTimeout(input._debounce);
-        input._debounce = setTimeout(persist, 200);
-      });
-      input.addEventListener('blur', (e) => {
-        state.players[idx] = e.target.value.trim();
-        persist();
-      });
-      grid.appendChild(input);
-    }
-  }
+  // ---- Rendering (this session) ----------------------------------------
 
   // Generalized so the same logic can compute standings for a past session
   // pulled from history, not just the live `state`.
@@ -1121,6 +1290,10 @@
   function renderStandings() {
     const box = document.getElementById('leaderboard');
     const rows = computeStandings();
+    if (!rows.length) {
+      box.innerHTML = '<p class="empty-hint">Veldu hverjir spila í kvöld til að byrja.</p>';
+      return;
+    }
     const maxWins = Math.max(1, ...rows.map((r) => r.wins));
     const sorted = [...rows].sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
     const labels = rankLabels(sorted);
@@ -1146,6 +1319,16 @@
 
   function renderNext() {
     const section = document.getElementById('next-section');
+
+    if (!state.schedule.length) {
+      section.innerHTML = `
+        <div class="card next-card">
+          <p style="margin:0;">Veldu hverjir spila í kvöld hér að neðan og smelltu á "Búa til leikjaplan" til að byrja.</p>
+        </div>
+      `;
+      return;
+    }
+
     const nextIdx = state.results.findIndex((r) => r === null);
     const allPlayed = nextIdx === -1;
 
@@ -1202,6 +1385,10 @@
   // winner, or tap the highlighted team again to clear it.
   function renderSchedule() {
     const list = document.getElementById('schedule-list');
+    if (!state.schedule.length) {
+      list.innerHTML = '<p class="empty-hint">Ekkert leikjaplan ennþá.</p>';
+      return;
+    }
     list.innerHTML = state.schedule.map((r, i) => {
       const result = state.results[i];
       const restHtml = r.rest.length
@@ -1233,45 +1420,107 @@
   }
 
   function renderAll() {
-    renderPlayers();
     renderNext();
     renderStandings();
     renderSchedule();
     renderFinishButton();
   }
 
-  // ---- Setup card (player/round count) --------------------------------
+  // ---- Setup card: attendance (roster + guests) + round count ---------
 
-  let draftPlayerCount = state.playerCount;
+  let draftAttendance = new Set();
+  let draftGuests = [];
 
-  function renderSetup() {
-    // Skip while the user has this card open and mid-adjustment (e.g. a
-    // remote update landing while they're editing the round count), same
-    // reasoning as the players-grid guard below.
-    if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#setup-card')) return;
-    draftPlayerCount = state.playerCount;
-    document.getElementById('pc-value').textContent = draftPlayerCount;
-    document.getElementById('rc-input').value = state.schedule.length;
+  function renderRosterChecklist() {
+    const box = document.getElementById('roster-checklist');
+    if (!rosterCache.length) {
+      box.innerHTML = '<p class="empty-hint">Enginn fastur leikmaður skráður ennþá — bættu við hér að neðan.</p>';
+      return;
+    }
+    box.innerHTML = rosterCache.map((p) => `
+      <label class="roster-row">
+        <input type="checkbox" data-roster-id="${p.id}" ${draftAttendance.has(p.id) ? 'checked' : ''}>
+        <span>${escapeHtml(p.name)}</span>
+      </label>
+    `).join('');
+    box.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) draftAttendance.add(cb.dataset.rosterId);
+        else draftAttendance.delete(cb.dataset.rosterId);
+      });
+    });
   }
 
-  document.getElementById('pc-minus').addEventListener('click', () => {
-    draftPlayerCount = Math.max(MIN_PLAYERS, draftPlayerCount - 1);
-    document.getElementById('pc-value').textContent = draftPlayerCount;
+  function renderGuestChips() {
+    const box = document.getElementById('guest-chips');
+    box.innerHTML = draftGuests.map((name, i) => `
+      <span class="chip">${escapeHtml(name)} <button data-remove-guest="${i}" type="button" aria-label="Fjarlægja gest">×</button></span>
+    `).join('');
+    box.querySelectorAll('[data-remove-guest]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        draftGuests.splice(Number(btn.dataset.removeGuest), 1);
+        renderGuestChips();
+      });
+    });
+  }
+
+  // Skip re-syncing the draft attendance/round-count from `state` while the
+  // user has this card open and mid-edit (e.g. a remote update landing
+  // while they're ticking checkboxes) — same reasoning as the earlier
+  // players-grid guard, generalized to the whole setup card.
+  function renderSetup() {
+    if (!inSetupCard()) {
+      draftAttendance = new Set((state.rosterIds || []).filter(Boolean));
+      document.getElementById('rc-input').value = state.schedule.length || 15;
+    }
+    renderRosterChecklist();
+  }
+
+  document.getElementById('add-roster-btn').addEventListener('click', async () => {
+    const input = document.getElementById('new-roster-name');
+    const name = input.value.trim();
+    if (!name) return;
+    if (!db) { showError('Þarf nettengingu til að bæta við leikmanni'); return; }
+    try {
+      const ref = await addDoc(collection(db, 'roster'), { name, createdAt: Date.now() });
+      draftAttendance.add(ref.id);
+      input.value = '';
+      renderRosterChecklist();
+    } catch (e) {
+      showError('Ekki tókst að bæta við leikmanni: ' + (e && e.code ? e.code : 'óþekkt villa'));
+    }
   });
-  document.getElementById('pc-plus').addEventListener('click', () => {
-    draftPlayerCount = Math.min(MAX_PLAYERS, draftPlayerCount + 1);
-    document.getElementById('pc-value').textContent = draftPlayerCount;
+
+  document.getElementById('add-guest-btn').addEventListener('click', () => {
+    const input = document.getElementById('new-guest-name');
+    const name = input.value.trim();
+    if (!name) return;
+    draftGuests.push(name);
+    input.value = '';
+    renderGuestChips();
   });
 
   function doApplySetup() {
     const rcInput = document.getElementById('rc-input');
     const roundCount = Math.max(1, Math.min(99, parseInt(rcInput.value, 10) || 15));
-    const oldPlayers = state.players;
-    state.playerCount = draftPlayerCount;
-    state.players = Array.from({ length: draftPlayerCount }, (_, i) => oldPlayers[i] || '');
-    state.schedule = generateSchedule(draftPlayerCount, roundCount);
+    const attendingIds = [...draftAttendance];
+    const totalCount = attendingIds.length + draftGuests.length;
+    if (totalCount < MIN_PLAYERS) {
+      showError(`Þarf minnst ${MIN_PLAYERS} leikmenn (hakað við + gestir)`);
+      return;
+    }
+    if (totalCount > MAX_PLAYERS) {
+      showError(`Mest ${MAX_PLAYERS} leikmenn í einu`);
+      return;
+    }
+    state.rosterIds = [...attendingIds, ...draftGuests.map(() => null)];
+    state.players = [...attendingIds.map(rosterName), ...draftGuests];
+    state.playerCount = totalCount;
+    state.schedule = generateSchedule(totalCount, roundCount);
     state.results = Array(roundCount).fill(null);
     state.finished = false;
+    draftGuests = [];
+    renderGuestChips();
     renderAll();
     renderSetup();
     persist();
@@ -1279,11 +1528,11 @@
 
   // ---- Buttons: confirm-armed destructive actions ----------------------
 
-  // Artifact pages run sandboxed and browsers commonly block window.confirm()
-  // there (it silently returns false, no dialog ever shows) — so
-  // destructive buttons confirm inline instead: tap once to arm, tap again
-  // within a few seconds to actually do it. If there's nothing to lose
-  // (no results recorded yet), skip the confirmation entirely.
+  // This page runs as a normal top-level site (not a sandboxed iframe), so
+  // native confirm() would actually work here — but the tap-to-arm pattern
+  // is kept for a consistent, less jarring feel across all destructive
+  // actions, and because it degrades better than a blocking native dialog
+  // if this file is ever re-embedded somewhere sandboxed again.
   function armWithConfirm(btn, confirmLabel, action, shouldConfirm) {
     const original = btn.textContent;
     let armed = false;
@@ -1349,29 +1598,10 @@
     startNewSession();
   }, () => true);
 
-  document.getElementById('history-btn').addEventListener('click', async () => {
-    const box = document.getElementById('history-list');
-    if (!box.hidden) {
-      box.hidden = true;
-      return;
-    }
-    if (!db) {
-      showError('Þarf nettengingu til að sjá fyrri kvöld');
-      return;
-    }
-    box.hidden = false;
-    box.innerHTML = '<p style="color:var(--muted);font-size:0.82rem;margin:0;">Sæki...</p>';
-    try {
-      const sessions = await loadSessionHistory();
-      renderHistoryList(sessions);
-    } catch (e) {
-      box.innerHTML = '<p style="color:var(--muted);font-size:0.82rem;margin:0;">Ekki tókst að sækja söguna.</p>';
-    }
-  });
-
   loadLocal();
   renderSetup();
   renderAll();
   renderSessionInfo();
+  subscribeRoster();
   initFirestoreSync();
 </script>

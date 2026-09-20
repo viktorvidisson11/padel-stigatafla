@@ -1357,10 +1357,17 @@
       const resumeLink = state.finished && !allPlayed
         ? `<button class="resume-link" id="resume-link">Halda áfram að spila</button>`
         : '';
+      // Naturally finishing the plan (not manually ending it early) offers
+      // a one-tap way to keep playing the same night, without needing to
+      // scroll down to the "Bæta við leikjum" control.
+      const addMoreLink = allPlayed && !state.finished
+        ? `<button class="resume-link" id="add-more-link">Bæta við 5 leikjum og halda áfram</button>`
+        : '';
       section.innerHTML = `
         <div class="card finished-banner">
           <span class="headline">${headline}</span>
           ${resumeLink}
+          ${addMoreLink}
         </div>
       `;
       const resumeBtn = document.getElementById('resume-link');
@@ -1370,6 +1377,10 @@
           renderAll();
           persist();
         });
+      }
+      const addMoreBtn = document.getElementById('add-more-link');
+      if (addMoreBtn) {
+        addMoreBtn.addEventListener('click', () => doAddGames(5));
       }
       return;
     }
@@ -1597,15 +1608,19 @@
     persist();
   }, hasResults);
 
-  document.getElementById('add-games-btn').addEventListener('click', () => {
-    const input = document.getElementById('add-count');
-    const extra = Math.max(1, Math.min(50, parseInt(input.value, 10) || 5));
+  function doAddGames(extra) {
     state.schedule = appendRounds(state.playerCount, state.schedule, extra);
     state.results = state.results.concat(Array(extra).fill(null));
     state.finished = false;
     renderAll();
     renderSetup();
     persist();
+  }
+
+  document.getElementById('add-games-btn').addEventListener('click', () => {
+    const input = document.getElementById('add-count');
+    const extra = Math.max(1, Math.min(50, parseInt(input.value, 10) || 5));
+    doAddGames(extra);
   });
 
   document.getElementById('finish-btn').addEventListener('click', () => {

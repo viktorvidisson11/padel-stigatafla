@@ -350,24 +350,6 @@
     background: var(--accent);
   }
 
-  .nem-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 7px 0;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.9rem;
-  }
-
-  .nem-row:last-child { border-bottom: none; }
-
-  .nem-detail {
-    color: var(--muted);
-    font-size: 0.78rem;
-    white-space: nowrap;
-  }
-
   .next-card {
     background: linear-gradient(180deg, var(--surface) 0%, var(--surface-alt) 100%);
     border: 1.5px solid var(--accent);
@@ -1164,13 +1146,17 @@
       .map((v) => ({ names: `${rosterName(v.a)} & ${rosterName(v.b)}`, wins: v.wins, played: v.played, pct: v.wins / v.played }))
       .sort((a, b) => b.pct - a.pct);
 
-    // Handicap-adjusted: rank opponents by how much they over-perform their
-    // OWN overall win rate specifically against this player, not by raw
-    // win rate against them. Without this, the strongest player in the
-    // group is just everyone's "nemesis" by default (they beat everyone
-    // often), which says nothing interesting. Weighting by the opponent's
-    // own baseline surfaces the real story — a middling or weak player who
-    // nonetheless has a specific person's number.
+    // Handicap-adjusted: an opponent's win against X counts for more when
+    // that opponent is themselves weak overall, and for less when they're
+    // strong overall — like a golf handicap on the win itself. A win from
+    // the group's #1 player is expected and gets little credit; the same
+    // win from the group's last-place player is a real upset and gets a
+    // lot. Concretely, boost opponent Y's raw win rate against X by
+    // (1 - Y's own overall win rate): a weak Y (low own win rate) gets a
+    // big multiplier, a strong Y (high own win rate) gets a small one.
+    // The nemesis is whoever has the highest handicap-boosted score, which
+    // can crown a middling player over a stronger one who nominally has a
+    // better raw record against X.
     function overallPct(id) {
       const v = playerAgg[id];
       return v && v.played > 0 ? v.wins / v.played : 0;
@@ -1182,17 +1168,17 @@
       Object.entries(opps).forEach(([oppId, v]) => {
         if (v.gamesAgainst < 1) return;
         const rate = v.lossesToOpp / v.gamesAgainst;
-        const baseline = overallPct(oppId);
-        const surprise = rate - baseline;
-        if (!best || surprise > best.surprise || (surprise === best.surprise && v.gamesAgainst > best.games)) {
-          best = { oppId, rate, baseline, surprise, games: v.gamesAgainst };
+        const handicap = 1 - overallPct(oppId);
+        const score = rate * (1 + handicap);
+        if (!best || score > best.score || (score === best.score && v.gamesAgainst > best.games)) {
+          best = { oppId, rate, score, wins: v.lossesToOpp, games: v.gamesAgainst };
         }
       });
       return {
         name: p.name,
         nemesisName: best ? rosterName(best.oppId) : null,
         rate: best ? best.rate : 0,
-        surprise: best ? best.surprise : 0,
+        wins: best ? best.wins : 0,
         games: best ? best.games : 0,
       };
     });
@@ -1224,17 +1210,21 @@
       `).join('') : '<p class="empty-hint">Engin gögn ennþá.</p>'}
 
       <h3 class="stats-subhead">Erkióvinur hvers og eins</h3>
-      <p class="empty-hint" style="margin-top:-4px;">Miðað við hver vinnur þig oftar en þeirra eigið heildarform gefur til kynna — ekki bara hver er sterkastur.</p>
-      ${nemesisRows.map((p) => {
-        if (!p.nemesisName) return `<div class="nem-row"><span>${escapeHtml(p.name)}</span><span class="nem-detail">—</span></div>`;
-        const sign = p.surprise >= 0 ? '+' : '';
-        return `
-          <div class="nem-row">
-            <span>${escapeHtml(p.name)}</span>
-            <span class="nem-detail">${escapeHtml(p.nemesisName)} — ${Math.round(p.rate * 100)}% af ${p.games} (${sign}${Math.round(p.surprise * 100)}% umfram vænt)</span>
-          </div>
-        `;
-      }).join('')}
+      <p class="empty-hint" style="margin-top:-4px;">Vegið með forgjöf — sigur frá þeim sem er neðar í heildarstöðunni telur meira en sigur frá þeim sem er ofar.</p>
+      <div class="lb-row" style="border-bottom:2px solid var(--line);">
+        <div></div>
+        <div class="lb-name" style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">Leikmaður</div>
+        <div class="lb-name" style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">Achilles hæll</div>
+        <div></div>
+      </div>
+      ${nemesisRows.map((p) => `
+        <div class="lb-row">
+          <div></div>
+          <div class="lb-name">${escapeHtml(p.name)}</div>
+          <div class="lb-name">${p.nemesisName ? escapeHtml(p.nemesisName) : '—'}</div>
+          <div class="lb-record">${p.nemesisName ? `${Math.round(p.rate * 100)}%&nbsp;(${p.wins}/${p.games})` : ''}</div>
+        </div>
+      `).join('')}
     `;
   }
 

@@ -1159,21 +1159,36 @@
       .map((v) => ({ names: `${rosterName(v.a)} & ${rosterName(v.b)}`, wins: v.wins, played: v.played, pct: v.wins / v.played }))
       .sort((a, b) => b.pct - a.pct);
 
+    // Handicap-adjusted: rank opponents by how much they over-perform their
+    // OWN overall win rate specifically against this player, not by raw
+    // win rate against them. Without this, the strongest player in the
+    // group is just everyone's "nemesis" by default (they beat everyone
+    // often), which says nothing interesting. Weighting by the opponent's
+    // own baseline surfaces the real story — a middling or weak player who
+    // nonetheless has a specific person's number.
+    function overallPct(id) {
+      const v = playerAgg[id];
+      return v && v.played > 0 ? v.wins / v.played : 0;
+    }
+
     const nemesisRows = playerRows.map((p) => {
       const opps = nemesis[p.id] || {};
-      let worst = null;
+      let best = null;
       Object.entries(opps).forEach(([oppId, v]) => {
         if (v.gamesAgainst < 1) return;
         const rate = v.lossesToOpp / v.gamesAgainst;
-        if (!worst || rate > worst.rate || (rate === worst.rate && v.gamesAgainst > worst.games)) {
-          worst = { oppId, rate, games: v.gamesAgainst };
+        const baseline = overallPct(oppId);
+        const surprise = rate - baseline;
+        if (!best || surprise > best.surprise || (surprise === best.surprise && v.gamesAgainst > best.games)) {
+          best = { oppId, rate, baseline, surprise, games: v.gamesAgainst };
         }
       });
       return {
         name: p.name,
-        nemesisName: worst ? rosterName(worst.oppId) : null,
-        rate: worst ? worst.rate : 0,
-        games: worst ? worst.games : 0,
+        nemesisName: best ? rosterName(best.oppId) : null,
+        rate: best ? best.rate : 0,
+        surprise: best ? best.surprise : 0,
+        games: best ? best.games : 0,
       };
     });
 
@@ -1204,12 +1219,17 @@
       `).join('') : '<p class="empty-hint">Engin gögn ennþá.</p>'}
 
       <h3 class="stats-subhead">Erkióvinur hvers og eins</h3>
-      ${nemesisRows.map((p) => `
-        <div class="nem-row">
-          <span>${escapeHtml(p.name)}</span>
-          <span class="nem-detail">${p.nemesisName ? `${escapeHtml(p.nemesisName)} — ${Math.round(p.rate * 100)}% af ${p.games}` : '—'}</span>
-        </div>
-      `).join('')}
+      <p class="empty-hint" style="margin-top:-4px;">Miðað við hver vinnur þig oftar en þeirra eigið heildarform gefur til kynna — ekki bara hver er sterkastur.</p>
+      ${nemesisRows.map((p) => {
+        if (!p.nemesisName) return `<div class="nem-row"><span>${escapeHtml(p.name)}</span><span class="nem-detail">—</span></div>`;
+        const sign = p.surprise >= 0 ? '+' : '';
+        return `
+          <div class="nem-row">
+            <span>${escapeHtml(p.name)}</span>
+            <span class="nem-detail">${escapeHtml(p.nemesisName)} — ${Math.round(p.rate * 100)}% af ${p.games} (${sign}${Math.round(p.surprise * 100)}% umfram vænt)</span>
+          </div>
+        `;
+      }).join('')}
     `;
   }
 

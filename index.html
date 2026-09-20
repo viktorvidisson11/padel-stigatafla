@@ -255,7 +255,7 @@
 
   .lb-row {
     display: grid;
-    grid-template-columns: 40px 1fr auto 60px;
+    grid-template-columns: auto 1fr auto 60px;
     align-items: center;
     gap: 10px;
     padding: 9px 0;
@@ -270,9 +270,16 @@
     color: var(--muted);
     font-weight: 600;
     white-space: nowrap;
+    min-width: 22px;
   }
 
-  .lb-row.first .lb-rank { color: var(--accent-ink); }
+  .lb-row.first .lb-rank {
+    color: var(--accent-ink);
+    background: var(--accent);
+    border-radius: 999px;
+    padding: 2px 8px;
+    display: inline-block;
+  }
 
   .lb-name {
     font-weight: 600;

@@ -173,6 +173,38 @@
     margin-top: 10px;
   }
 
+  .delete-session-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+
+  .delete-session-box input {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface-alt);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 0.88rem;
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  .audit-row {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.85rem;
+  }
+
+  .audit-row:last-child { border-bottom: none; }
+
   .setup-row {
     display: flex;
     align-items: center;
@@ -631,6 +663,11 @@
       </select>
     </div>
     <div id="history-list" class="history-list" hidden></div>
+    <div class="setup-row" style="margin-top:10px;">
+      <span class="setup-label">Breytingaskrá</span>
+      <button class="btn" id="audit-log-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;">Skoða</button>
+    </div>
+    <div id="audit-log-list" class="history-list" hidden></div>
   </section>
 
   <section class="card" id="stats-card">
@@ -695,7 +732,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
   import {
-    getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot,
+    getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot,
     collection, addDoc, query, orderBy, limit, getDocs,
   } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
@@ -1032,6 +1069,31 @@
     }).join('');
   }
 
+  // Deleting a session writes a permanent record to `auditLog` first (who
+  // can't be tracked without accounts, but when and why can) and only then
+  // removes the session doc — the log entry keeps a snapshot of what was
+  // deleted so it's still meaningful after the session itself is gone.
+  async function deleteSession(s, reason) {
+    if (!db) { showError('Þarf nettengingu'); return; }
+    try {
+      await addDoc(collection(db, 'auditLog'), {
+        type: 'session_deleted',
+        sessionId: s.id,
+        reason,
+        sessionCreatedAt: s.createdAt || null,
+        playerCount: s.playerCount || 0,
+        players: Array.isArray(s.players) ? s.players : [],
+        deletedAt: Date.now(),
+      });
+      await deleteDoc(sessionDocRef(s.id));
+      document.getElementById('history-list').hidden = true;
+      document.getElementById('history-select').value = '';
+      await populateHistoryDropdown();
+    } catch (e) {
+      showError('Ekki tókst að eyða: ' + (e && e.code ? e.code : 'óþekkt villa'));
+    }
+  }
+
   document.getElementById('history-select').addEventListener('change', (e) => {
     const box = document.getElementById('history-list');
     const id = e.target.value;
@@ -1041,7 +1103,7 @@
     box.hidden = false;
     const rows = computeStandingsFor(sanitize(s)).sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
     const labels = rankLabels(rows);
-    box.innerHTML = rows.map((r, i) => `
+    const standingsHtml = rows.map((r, i) => `
       <div class="lb-row">
         <div class="lb-rank">${labels[i]}</div>
         <div class="lb-name">${escapeHtml(r.name)}</div>
@@ -1049,6 +1111,65 @@
         <div class="lb-record">${r.wins}&nbsp;/&nbsp;${r.played}</div>
       </div>
     `).join('');
+
+    const isCurrent = id === currentSessionId;
+    const deleteHtml = isCurrent
+      ? `<p class="empty-hint" style="margin-top:10px;">Ekki hægt að eyða kvöldinu sem er í gangi núna.</p>`
+      : `
+        <div class="delete-session-box">
+          <input type="text" id="delete-reason" placeholder="Af hverju á að eyða þessu kvöldi?" maxlength="140">
+          <button class="btn danger" id="delete-session-btn" type="button" disabled>Eyða þessu kvöldi</button>
+        </div>
+      `;
+
+    box.innerHTML = standingsHtml + deleteHtml;
+
+    if (!isCurrent) {
+      const reasonInput = document.getElementById('delete-reason');
+      const delBtn = document.getElementById('delete-session-btn');
+      reasonInput.addEventListener('input', () => {
+        delBtn.disabled = !reasonInput.value.trim();
+      });
+      armWithConfirm(delBtn, 'Ertu viss? Eyðir varanlega', () => {
+        const reason = reasonInput.value.trim();
+        if (!reason) return;
+        deleteSession(s, reason);
+      }, () => true);
+    }
+  });
+
+  document.getElementById('audit-log-btn').addEventListener('click', async () => {
+    const box = document.getElementById('audit-log-list');
+    if (!box.hidden) { box.hidden = true; return; }
+    if (!db) { showError('Þarf nettengingu'); return; }
+    box.hidden = false;
+    box.innerHTML = '<p class="empty-hint">Sæki...</p>';
+    try {
+      const q = query(collection(db, 'auditLog'), orderBy('deletedAt', 'desc'), limit(50));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        box.innerHTML = '<p class="empty-hint">Engar skráðar breytingar ennþá.</p>';
+        return;
+      }
+      box.innerHTML = snap.docs.map((d) => {
+        const v = d.data();
+        const when = v.deletedAt
+          ? new Date(v.deletedAt).toLocaleString('is-IS', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+          : '?';
+        const sessionWhen = v.sessionCreatedAt
+          ? new Date(v.sessionCreatedAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
+          : '?';
+        return `
+          <div class="audit-row">
+            <div><strong>Kvöldi frá ${escapeHtml(sessionWhen)} eytt</strong></div>
+            <div class="empty-hint" style="margin:2px 0 0;">Ástæða: ${escapeHtml(v.reason || '(engin skráð)')}</div>
+            <div class="empty-hint" style="margin:0;">${escapeHtml(when)}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (e) {
+      box.innerHTML = '<p class="empty-hint">Ekki tókst að sækja breytingaskrá.</p>';
+    }
   });
 
   // ---- Player roster -----------------------------------------------------

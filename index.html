@@ -1323,8 +1323,15 @@
         if (v.gamesAgainst < 1) return;
         const rate = v.lossesToOpp / v.gamesAgainst;
         const score = rate * (2 - overallPct(oppId));
+        // A score of exactly 0 means this opponent has NEVER beaten the
+        // player — that's not a weakness, so it can't be a nemesis. Without
+        // this, a player who has never lost to anyone (every candidate
+        // tied at 0) still got one named, arbitrarily, by the games-played
+        // tiebreak — which then picked out their MOST-proven partner/
+        // opponent and mislabeled them as the "worst".
+        if (score <= 0) return;
         if (!bestOpp || score > bestOpp.score || (score === bestOpp.score && v.gamesAgainst > bestOpp.games)) {
-          bestOpp = { id: oppId, rate, score, games: v.gamesAgainst };
+          bestOpp = { id: oppId, rate, wins: v.lossesToOpp, score, games: v.gamesAgainst };
         }
       });
 
@@ -1334,10 +1341,12 @@
         if (pair.a === p.id) partnerId = pair.b;
         else if (pair.b === p.id) partnerId = pair.a;
         if (!partnerId || pair.played < 1) return;
-        const lossRate = 1 - pair.wins / pair.played;
+        const losses = pair.played - pair.wins;
+        const lossRate = losses / pair.played;
         const score = lossRate * (1 + overallPct(partnerId));
+        if (score <= 0) return; // never lost with this partner — not a weakness
         if (!bestPartner || score > bestPartner.score || (score === bestPartner.score && pair.played > bestPartner.games)) {
-          bestPartner = { id: partnerId, lossRate, score, games: pair.played };
+          bestPartner = { id: partnerId, lossRate, losses, score, games: pair.played };
         }
       });
 
@@ -1345,9 +1354,11 @@
         name: p.name,
         oppName: bestOpp ? rosterName(bestOpp.id) : null,
         oppRate: bestOpp ? bestOpp.rate : 0,
+        oppWins: bestOpp ? bestOpp.wins : 0,
         oppGames: bestOpp ? bestOpp.games : 0,
         partnerName: bestPartner ? rosterName(bestPartner.id) : null,
         partnerLossRate: bestPartner ? bestPartner.lossRate : 0,
+        partnerLosses: bestPartner ? bestPartner.losses : 0,
         partnerGames: bestPartner ? bestPartner.games : 0,
       };
     });
@@ -1378,8 +1389,7 @@
         </div>
       `).join('') : '<p class="empty-hint">Engin gögn ennþá.</p>'}
 
-      <h3 class="stats-subhead">Achilles hæll hvers og eins</h3>
-      <p class="empty-hint" style="margin-top:-4px;">Vegið með forgjöf — úrslit gegn/með sterkari leikmanni telur meira en gegn/með veikari.</p>
+      <h3 class="stats-subhead">Achilles hæll</h3>
       <div class="table-scroll">
         <table class="nem-table">
           <thead>
@@ -1389,8 +1399,8 @@
             ${achillesRows.map((p) => `
               <tr>
                 <td>${escapeHtml(p.name)}</td>
-                <td>${p.oppName ? `${escapeHtml(p.oppName)} ${Math.round(p.oppRate * 100)}% (${p.oppGames})` : '—'}</td>
-                <td>${p.partnerName ? `${escapeHtml(p.partnerName)} ${Math.round(p.partnerLossRate * 100)}% (${p.partnerGames})` : '—'}</td>
+                <td>${p.oppName ? `${escapeHtml(p.oppName)} ${Math.round(p.oppRate * 100)}% (${p.oppWins}/${p.oppGames})` : '—'}</td>
+                <td>${p.partnerName ? `${escapeHtml(p.partnerName)} ${Math.round(p.partnerLossRate * 100)}% (${p.partnerLosses}/${p.partnerGames})` : '—'}</td>
               </tr>
             `).join('')}
           </tbody>

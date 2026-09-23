@@ -1368,11 +1368,16 @@
       return;
     }
 
+    const pctKey = (x) => Math.round(x.pct * 100);
+    const playerLabels = rankLabels(playerRows, pctKey);
+    const topPairs = pairRows.slice(0, 5);
+    const pairLabels = rankLabels(topPairs, pctKey);
+
     box.innerHTML = `
       <h3 class="stats-subhead">Sigurhlutfall leikmanna</h3>
       ${playerRows.map((p, i) => `
-        <div class="lb-row ${i === 0 ? 'first' : ''}">
-          <div class="lb-rank">${i + 1}.</div>
+        <div class="lb-row ${playerLabels[i] === playerLabels[0] ? 'first' : ''}">
+          <div class="lb-rank">${playerLabels[i]}</div>
           <div class="lb-name">${escapeHtml(p.name)}</div>
           <div></div>
           <div class="lb-record">${Math.round(p.pct * 100)}%&nbsp;(${p.wins}/${p.played})</div>
@@ -1380,9 +1385,9 @@
       `).join('')}
 
       <h3 class="stats-subhead">Besta liðið saman</h3>
-      ${pairRows.length ? pairRows.slice(0, 5).map((p, i) => `
-        <div class="lb-row ${i === 0 ? 'first' : ''}">
-          <div class="lb-rank">${i + 1}.</div>
+      ${topPairs.length ? topPairs.map((p, i) => `
+        <div class="lb-row ${pairLabels[i] === pairLabels[0] ? 'first' : ''}">
+          <div class="lb-rank">${pairLabels[i]}</div>
           <div class="lb-name">${escapeHtml(p.names)}</div>
           <div></div>
           <div class="lb-record">${Math.round(p.pct * 100)}%&nbsp;(${p.wins}/${p.played})</div>
@@ -1468,14 +1473,19 @@
     return computeStandingsFor(state);
   }
 
-  // Standard competition ranking: players tied on wins share one rank
-  // label (e.g. "2.-3."), and the rank after a tie skips ahead to match.
-  function rankLabels(sorted) {
+  // Standard competition ranking: entries tied on `keyFn` (defaults to
+  // wins, for the per-night standings) share one rank label (e.g.
+  // "2.-3."), and the rank after a tie skips ahead to match. Reused for
+  // the season stats tables with a rounded-percentage key so "50% (1/2)"
+  // and "50% (1/2)" tie even though the sort itself breaks that tie by
+  // games played.
+  function rankLabels(sorted, keyFn) {
+    const key = keyFn || ((x) => x.wins);
     const labels = [];
     let i = 0;
     while (i < sorted.length) {
       let j = i;
-      while (j + 1 < sorted.length && sorted[j + 1].wins === sorted[i].wins) j += 1;
+      while (j + 1 < sorted.length && key(sorted[j + 1]) === key(sorted[i])) j += 1;
       const label = i === j ? `${i + 1}.` : `${i + 1}.-${j + 1}.`;
       for (let k = i; k <= j; k++) labels.push(label);
       i = j + 1;

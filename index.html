@@ -1623,6 +1623,23 @@
     renderFinishButton();
   }
 
+  // Several buttons (new night, finish/resume, reshuffle, reset, add
+  // games) live in cards below "Næsti leikur" but their effect shows up
+  // IN that card, above where the user is looking — so the action can
+  // succeed with no visible sign of it from where they clicked, and a
+  // slow network round-trip makes that worse (they re-click, which
+  // — because it genuinely works — creates real duplicate side effects,
+  // like several new "kvöld"). Scrolling to it after every such action
+  // makes success unmistakable.
+  function scrollToNext() {
+    const el = document.getElementById('next-section');
+    // Plain (instant) scroll, not smooth: the goal here is unmistakable
+    // proof something happened, and a smooth-scroll animation can
+    // silently no-op in some browser contexts (confirmed in testing) —
+    // an instant jump has no such failure mode.
+    if (el) el.scrollIntoView({ block: 'start' });
+  }
+
   // ---- Setup card: attendance (roster + guests) + round count ---------
 
   let draftAttendance = new Set();
@@ -1765,6 +1782,7 @@
     state.finished = false;
     renderAll();
     persist();
+    scrollToNext();
   }, hasResults);
 
   armWithConfirm(document.getElementById('reset-btn'), 'Ertu viss? Smelltu aftur', () => {
@@ -1772,6 +1790,7 @@
     state.finished = false;
     renderAll();
     persist();
+    scrollToNext();
   }, hasResults);
 
   function doAddGames(extra) {
@@ -1781,6 +1800,7 @@
     renderAll();
     renderSetup();
     persist();
+    scrollToNext();
   }
 
   document.getElementById('add-games-btn').addEventListener('click', () => {
@@ -1793,10 +1813,34 @@
     state.finished = !state.finished;
     renderAll();
     persist();
+    scrollToNext();
   });
 
-  armWithConfirm(document.getElementById('new-session-btn'), 'Ertu viss? Byrjar nýtt kvöld fyrir alla', () => {
-    startNewSession();
+  // Guarded against overlapping calls, and shows an explicit in-progress
+  // and success state on the button itself — without this, a slow
+  // Firestore round-trip left the button looking idle while the create
+  // was still in flight, so an impatient re-click fired a second (fully
+  // real) session creation instead of doing nothing.
+  let creatingSession = false;
+  armWithConfirm(document.getElementById('new-session-btn'), 'Ertu viss? Byrjar nýtt kvöld fyrir alla', async () => {
+    if (creatingSession) return;
+    creatingSession = true;
+    const btn = document.getElementById('new-session-btn');
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Býr til nýtt kvöld...';
+    try {
+      await startNewSession();
+      btn.textContent = 'Nýtt kvöld byrjað ✓';
+      scrollToNext();
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    } catch (e) {
+      btn.textContent = original;
+      showError('Ekki tókst að byrja nýtt kvöld: ' + (e && e.code ? e.code : 'óþekkt villa'));
+    } finally {
+      btn.disabled = false;
+      creatingSession = false;
+    }
   }, () => true);
 
   loadLocal();

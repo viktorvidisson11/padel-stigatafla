@@ -205,6 +205,34 @@
 
   .audit-row:last-child { border-bottom: none; }
 
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .nem-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+
+  .nem-table th,
+  .nem-table td {
+    text-align: left;
+    padding: 7px 10px 7px 0;
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+
+  .nem-table th {
+    color: var(--muted);
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+
+  .nem-table tr:last-child td { border-bottom: none; }
+
   .setup-row {
     display: flex;
     align-items: center;
@@ -1258,49 +1286,69 @@
     const box = document.getElementById('stats-content');
     box.hidden = false;
 
+    // Equal win rate is broken by whoever has actually won more games — a
+    // 2/2 record shouldn't rank below a 1/1 record just because they tie
+    // on percentage.
     const playerRows = Object.entries(playerAgg)
       .filter(([, v]) => v.played > 0)
       .map(([id, v]) => ({ id, name: rosterName(id), wins: v.wins, played: v.played, pct: v.wins / v.played }))
-      .sort((a, b) => b.pct - a.pct);
+      .sort((a, b) => b.pct - a.pct || b.wins - a.wins);
 
     const pairRows = Object.values(pairAgg)
       .map((v) => ({ names: `${rosterName(v.a)} & ${rosterName(v.b)}`, wins: v.wins, played: v.played, pct: v.wins / v.played }))
-      .sort((a, b) => b.pct - a.pct);
+      .sort((a, b) => b.pct - a.pct || b.wins - a.wins);
 
-    // Handicap-adjusted: an opponent's win against X counts for more when
-    // that opponent is themselves weak overall, and for less when they're
-    // strong overall — like a golf handicap on the win itself. A win from
-    // the group's #1 player is expected and gets little credit; the same
-    // win from the group's last-place player is a real upset and gets a
-    // lot. Concretely, boost opponent Y's raw win rate against X by
-    // (1 - Y's own overall win rate): a weak Y (low own win rate) gets a
-    // big multiplier, a strong Y (high own win rate) gets a small one.
-    // The nemesis is whoever has the highest handicap-boosted score, which
-    // can crown a middling player over a stronger one who nominally has a
-    // better raw record against X.
+    // Handicap-adjusted, golf-style: an outcome counts for more when it's
+    // more surprising given the other player's own overall strength, and
+    // for less when it's expected.
+    //   Opponent Achilles heel: boost Y's win rate against X by how WEAK Y
+    //   is overall (1 - Y's baseline) — a win from the group's last-place
+    //   player is a real upset and scores high; a win from the group's #1
+    //   player is expected and scores low.
+    //   Partner Achilles heel: boost the pair's LOSS rate by how STRONG
+    //   the partner Z is overall (Z's baseline) — losing often alongside
+    //   a strong partner is surprising and scores high; losing alongside
+    //   a weak partner is expected and scores low.
+    // Same underlying idea both times: weight by how much the result
+    // deviates from what the other player's own record would predict.
     function overallPct(id) {
       const v = playerAgg[id];
       return v && v.played > 0 ? v.wins / v.played : 0;
     }
 
-    const nemesisRows = playerRows.map((p) => {
+    const achillesRows = playerRows.map((p) => {
       const opps = nemesis[p.id] || {};
-      let best = null;
+      let bestOpp = null;
       Object.entries(opps).forEach(([oppId, v]) => {
         if (v.gamesAgainst < 1) return;
         const rate = v.lossesToOpp / v.gamesAgainst;
-        const handicap = 1 - overallPct(oppId);
-        const score = rate * (1 + handicap);
-        if (!best || score > best.score || (score === best.score && v.gamesAgainst > best.games)) {
-          best = { oppId, rate, score, wins: v.lossesToOpp, games: v.gamesAgainst };
+        const score = rate * (2 - overallPct(oppId));
+        if (!bestOpp || score > bestOpp.score || (score === bestOpp.score && v.gamesAgainst > bestOpp.games)) {
+          bestOpp = { id: oppId, rate, score, games: v.gamesAgainst };
         }
       });
+
+      let bestPartner = null;
+      Object.values(pairAgg).forEach((pair) => {
+        let partnerId = null;
+        if (pair.a === p.id) partnerId = pair.b;
+        else if (pair.b === p.id) partnerId = pair.a;
+        if (!partnerId || pair.played < 1) return;
+        const lossRate = 1 - pair.wins / pair.played;
+        const score = lossRate * (1 + overallPct(partnerId));
+        if (!bestPartner || score > bestPartner.score || (score === bestPartner.score && pair.played > bestPartner.games)) {
+          bestPartner = { id: partnerId, lossRate, score, games: pair.played };
+        }
+      });
+
       return {
         name: p.name,
-        nemesisName: best ? rosterName(best.oppId) : null,
-        rate: best ? best.rate : 0,
-        wins: best ? best.wins : 0,
-        games: best ? best.games : 0,
+        oppName: bestOpp ? rosterName(bestOpp.id) : null,
+        oppRate: bestOpp ? bestOpp.rate : 0,
+        oppGames: bestOpp ? bestOpp.games : 0,
+        partnerName: bestPartner ? rosterName(bestPartner.id) : null,
+        partnerLossRate: bestPartner ? bestPartner.lossRate : 0,
+        partnerGames: bestPartner ? bestPartner.games : 0,
       };
     });
 
@@ -1330,22 +1378,24 @@
         </div>
       `).join('') : '<p class="empty-hint">Engin gögn ennþá.</p>'}
 
-      <h3 class="stats-subhead">Erkióvinur hvers og eins</h3>
-      <p class="empty-hint" style="margin-top:-4px;">Vegið með forgjöf — sigur frá þeim sem er neðar í heildarstöðunni telur meira en sigur frá þeim sem er ofar.</p>
-      <div class="lb-row" style="border-bottom:2px solid var(--line);">
-        <div></div>
-        <div class="lb-name" style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">Leikmaður</div>
-        <div class="lb-name" style="color:var(--muted);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;">Achilles hæll</div>
-        <div></div>
+      <h3 class="stats-subhead">Achilles hæll hvers og eins</h3>
+      <p class="empty-hint" style="margin-top:-4px;">Vegið með forgjöf — úrslit gegn/með sterkari leikmanni telur meira en gegn/með veikari.</p>
+      <div class="table-scroll">
+        <table class="nem-table">
+          <thead>
+            <tr><th>Leikmaður</th><th>Andstæðingur</th><th>Meðspilari</th></tr>
+          </thead>
+          <tbody>
+            ${achillesRows.map((p) => `
+              <tr>
+                <td>${escapeHtml(p.name)}</td>
+                <td>${p.oppName ? `${escapeHtml(p.oppName)} ${Math.round(p.oppRate * 100)}% (${p.oppGames})` : '—'}</td>
+                <td>${p.partnerName ? `${escapeHtml(p.partnerName)} ${Math.round(p.partnerLossRate * 100)}% (${p.partnerGames})` : '—'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
       </div>
-      ${nemesisRows.map((p) => `
-        <div class="lb-row">
-          <div></div>
-          <div class="lb-name">${escapeHtml(p.name)}</div>
-          <div class="lb-name">${p.nemesisName ? escapeHtml(p.nemesisName) : '—'}</div>
-          <div class="lb-record">${p.nemesisName ? `${Math.round(p.rate * 100)}%&nbsp;(${p.wins}/${p.games})` : ''}</div>
-        </div>
-      `).join('')}
     `;
   }
 

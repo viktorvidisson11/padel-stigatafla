@@ -547,6 +547,62 @@
     color: var(--muted);
   }
 
+  .round-delete-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1;
+    flex-shrink: 0;
+    align-self: center;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .round-delete-btn.confirm-armed {
+    background: #c24b3a;
+    border-color: #c24b3a;
+    color: #fff;
+  }
+
+  .manual-player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .manual-player-row:last-child { border-bottom: none; }
+
+  .manual-team-toggle {
+    display: flex;
+    gap: 6px;
+  }
+
+  .manual-team-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid var(--line);
+    background: var(--surface-alt);
+    color: var(--muted);
+    font-family: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .manual-team-btn.a { border-color: var(--team-a); }
+  .manual-team-btn.b { border-color: var(--team-b); }
+
+  .manual-team-btn.a.selected { background: var(--team-a); border-color: var(--team-a); color: #fff; }
+  .manual-team-btn.b.selected { background: var(--team-b); border-color: var(--team-b); color: #fff; }
+
   .round-body {
     flex: 1;
     min-width: 0;
@@ -736,6 +792,16 @@
   <section class="card">
     <h2 class="label">Allt planið</h2>
     <div class="schedule-list" id="schedule-list"></div>
+  </section>
+
+  <div class="toolbar">
+    <button class="btn" id="manual-game-btn" type="button">+ Bæta við handvirkum leik</button>
+  </div>
+  <section class="card" id="manual-game-panel" hidden>
+    <h2 class="label">Handvirkur leikur</h2>
+    <p class="empty-hint">Veldu tvo í lið A og tvo í lið B — gott þegar leikmenn týnast inn/út og planið passar ekki lengur.</p>
+    <div id="manual-game-players"></div>
+    <button class="apply-btn" id="manual-game-submit" type="button" disabled>Bæta við leik</button>
   </section>
 
   <div class="toolbar">
@@ -1622,12 +1688,33 @@
             </div>
             ${restHtml}
           </div>
+          <button class="round-delete-btn" data-round="${i}" type="button" aria-label="Eyða leik ${r.round}">×</button>
         </div>
       `;
     }).join('');
     list.querySelectorAll('.round-team-btn').forEach((btn) => {
       btn.addEventListener('click', () => setWinner(Number(btn.dataset.round), btn.dataset.winner));
     });
+    // Deleting a single round is a quick fix for a real, common mistake
+    // (someone was scheduled who wasn't actually there yet) — armed the
+    // same tap-twice way as every other destructive control, but scoped
+    // per-button since there's one per row.
+    list.querySelectorAll('.round-delete-btn').forEach((btn) => {
+      armWithConfirm(btn, '✓', () => deleteRound(Number(btn.dataset.round)), () => true);
+    });
+  }
+
+  // Removes one round outright (not just its result) — used to correct a
+  // schedule after the fact, e.g. a player who left early or arrived very
+  // late shouldn't stay listed in rounds that didn't really happen for
+  // them. Renumbers the remaining rounds so the display stays 1..N with
+  // no gaps.
+  function deleteRound(idx) {
+    state.schedule.splice(idx, 1);
+    state.results.splice(idx, 1);
+    state.schedule.forEach((r, i) => { r.round = i + 1; });
+    renderAll();
+    persist();
   }
 
   function renderFinishButton() {
@@ -1827,6 +1914,79 @@
     const input = document.getElementById('add-count');
     const extra = Math.max(1, Math.min(50, parseInt(input.value, 10) || 5));
     doAddGames(extra);
+  });
+
+  // ---- Manual game (players joining/leaving mid-session break the
+  // auto-generated plan) --------------------------------------------
+  //
+  // Lets a round be composed by hand — pick exactly 2 players for each
+  // team — and appended to the schedule, for whatever actually happened
+  // that the fair-rotation generator couldn't have predicted (someone
+  // arrived very late, someone left early, etc). The new round is a
+  // completely normal entry afterward: tappable in "Allt planið" like
+  // any other.
+  let manualTeamA = [];
+  let manualTeamB = [];
+
+  function renderManualGamePlayers() {
+    const box = document.getElementById('manual-game-players');
+    box.innerHTML = Array.from({ length: state.playerCount }, (_, idx) => {
+      const inA = manualTeamA.includes(idx);
+      const inB = manualTeamB.includes(idx);
+      return `
+        <div class="manual-player-row">
+          <span>${escapeHtml(playerName(idx))}</span>
+          <div class="manual-team-toggle">
+            <button class="manual-team-btn a ${inA ? 'selected' : ''}" data-idx="${idx}" data-team="A" type="button">A</button>
+            <button class="manual-team-btn b ${inB ? 'selected' : ''}" data-idx="${idx}" data-team="B" type="button">B</button>
+          </div>
+        </div>
+      `;
+    }).join('');
+    box.querySelectorAll('.manual-team-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.idx);
+        const team = btn.dataset.team;
+        const mine = team === 'A' ? manualTeamA : manualTeamB;
+        const other = team === 'A' ? manualTeamB : manualTeamA;
+        if (mine.includes(idx)) {
+          const next = mine.filter((x) => x !== idx);
+          if (team === 'A') manualTeamA = next; else manualTeamB = next;
+        } else {
+          if (mine.length >= 2) { showError(`Lið ${team} er þegar fullskipað (2)`); return; }
+          const otherNext = other.filter((x) => x !== idx);
+          if (team === 'A') { manualTeamB = otherNext; manualTeamA = [...manualTeamA, idx]; }
+          else { manualTeamA = otherNext; manualTeamB = [...manualTeamB, idx]; }
+        }
+        renderManualGamePlayers();
+        document.getElementById('manual-game-submit').disabled = !(manualTeamA.length === 2 && manualTeamB.length === 2);
+      });
+    });
+  }
+
+  document.getElementById('manual-game-btn').addEventListener('click', () => {
+    const panel = document.getElementById('manual-game-panel');
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      manualTeamA = [];
+      manualTeamB = [];
+      renderManualGamePlayers();
+      document.getElementById('manual-game-submit').disabled = true;
+      panel.scrollIntoView({ block: 'start' });
+    }
+  });
+
+  document.getElementById('manual-game-submit').addEventListener('click', () => {
+    if (manualTeamA.length !== 2 || manualTeamB.length !== 2) return;
+    const rest = Array.from({ length: state.playerCount }, (_, i) => i)
+      .filter((i) => !manualTeamA.includes(i) && !manualTeamB.includes(i));
+    state.schedule.push({ round: state.schedule.length + 1, rest, teamA: [...manualTeamA], teamB: [...manualTeamB] });
+    state.results.push(null);
+    state.finished = false;
+    document.getElementById('manual-game-panel').hidden = true;
+    renderAll();
+    persist();
+    document.getElementById('schedule-list').lastElementChild?.scrollIntoView({ block: 'center' });
   });
 
   document.getElementById('finish-btn').addEventListener('click', () => {

@@ -808,6 +808,12 @@
     <button class="btn reshuffle" id="reshuffle-btn" type="button">Endurraða</button>
     <button class="btn danger" id="reset-btn" type="button">Núllstilla úrslit</button>
   </div>
+  <section class="card" id="departed-panel">
+    <h2 class="label">Farin heim í kvöld</h2>
+    <p class="empty-hint">Hakaðu við þann sem er farinn — hann verður ekki með þegar bætt er við fleiri leikjum, en heldur sinni stöðu og sögu það sem af er.</p>
+    <div id="departed-checklist"></div>
+  </section>
+
   <div class="toolbar">
     <div class="add-games">
       <input type="number" id="add-count" class="rc-input" min="1" max="50" value="5" inputmode="numeric" aria-label="Fjöldi leikja sem á að bæta við">
@@ -864,12 +870,29 @@
   }
 
   // Extends `existingSchedule` (an array of {round, rest, teamA, teamB})
-  // by `extraCount` more rounds for `playerCount` players, replaying the
-  // existing rounds first to rebuild the running rest/partner counts.
-  // Returns the full (existing + new) schedule; never mutates the input.
-  function appendRounds(playerCount, existingSchedule, extraCount) {
-    const players = Array.from({ length: playerCount }, (_, i) => i);
-    const restCount = Array(playerCount).fill(0);
+  // by `extraCount` more rounds for the players in `activeIndices` (their
+  // real player-array indices — not necessarily 0..N-1 contiguous, since a
+  // player who has left partway through a night is simply left out of
+  // this list from then on while staying in the schedule's history).
+  // Replays the existing rounds first to rebuild running played/partner
+  // counts, so this is robust to rounds having been deleted or added
+  // manually in between — it only ever looks at what's actually in
+  // `existingSchedule` right now, never an assumed/expected count.
+  //
+  // Fairness is tracked by games PLAYED (not rest count): whoever has
+  // played the most so far is the one asked to sit out next, whenever
+  // that's possible without resting the same person twice in a row. Using
+  // played-count directly (rather than inferring fairness from rest
+  // history) is what makes this self-correct after a round gets deleted —
+  // e.g. a player who arrived late and had their early (wrongly
+  // scheduled) rounds removed will, correctly, still show fewer games
+  // played than everyone else, and so gets prioritized to play more from
+  // here on rather than being treated as "already had their fair share of
+  // rest".
+  function appendRounds(activeIndices, existingSchedule, extraCount) {
+    const players = activeIndices.slice();
+    const playedCount = {};
+    players.forEach((p) => { playedCount[p] = 0; });
     const partnerCount = {};
     players.forEach((p) => players.forEach((q) => {
       if (q > p) partnerCount[pairKey(p, q)] = 0;
@@ -877,13 +900,15 @@
     let lastRest = new Set();
 
     existingSchedule.forEach((r) => {
-      r.rest.forEach((p) => { restCount[p] += 1; });
-      partnerCount[pairKey(r.teamA[0], r.teamA[1])] += 1;
-      partnerCount[pairKey(r.teamB[0], r.teamB[1])] += 1;
+      [...r.teamA, ...r.teamB].forEach((p) => { if (p in playedCount) playedCount[p] += 1; });
+      const keyA = pairKey(r.teamA[0], r.teamA[1]);
+      if (keyA in partnerCount) partnerCount[keyA] += 1;
+      const keyB = pairKey(r.teamB[0], r.teamB[1]);
+      if (keyB in partnerCount) partnerCount[keyB] += 1;
       lastRest = new Set(r.rest);
     });
 
-    const restersNeeded = Math.max(0, playerCount - 4);
+    const restersNeeded = Math.max(0, players.length - 4);
     const newRounds = [];
 
     for (let n = 0; n < extraCount; n++) {
@@ -891,9 +916,9 @@
       if (restersNeeded > 0) {
         const eligible = players.filter((p) => !lastRest.has(p));
         const fallback = players.filter((p) => lastRest.has(p));
-        const byLeastRested = (a, b) => restCount[a] - restCount[b] || Math.random() - 0.5;
-        eligible.sort(byLeastRested);
-        fallback.sort(byLeastRested);
+        const byMostPlayed = (a, b) => playedCount[b] - playedCount[a] || Math.random() - 0.5;
+        eligible.sort(byMostPlayed);
+        fallback.sort(byMostPlayed);
         resters = eligible.length >= restersNeeded
           ? eligible.slice(0, restersNeeded)
           : eligible.concat(fallback.slice(0, restersNeeded - eligible.length));
@@ -926,7 +951,7 @@
         teamB: best.teamB,
       });
 
-      resters.forEach((p) => { restCount[p] += 1; });
+      active.forEach((p) => { playedCount[p] += 1; });
       partnerCount[pairKey(best.teamA[0], best.teamA[1])] += 1;
       partnerCount[pairKey(best.teamB[0], best.teamB[1])] += 1;
       lastRest = restersSet;
@@ -936,7 +961,7 @@
   }
 
   function generateSchedule(playerCount, roundCount) {
-    return appendRounds(playerCount, [], roundCount);
+    return appendRounds(Array.from({ length: playerCount }, (_, i) => i), [], roundCount);
   }
 
   // ---- State -------------------------------------------------------------
@@ -956,6 +981,7 @@
       playerCount: 0,
       players: [],
       rosterIds: [],
+      departed: [],
       schedule: [],
       results: [],
       finished: false,
@@ -979,10 +1005,14 @@
     const rosterIds = Array.isArray(raw.rosterIds) && raw.rosterIds.length === raw.playerCount
       ? raw.rosterIds.map((id) => (typeof id === 'string' ? id : null))
       : Array(raw.playerCount).fill(null);
+    const departed = Array.isArray(raw.departed) && raw.departed.length === raw.playerCount
+      ? raw.departed.map((d) => !!d)
+      : Array(raw.playerCount).fill(false);
     return {
       playerCount: raw.playerCount,
       players,
       rosterIds,
+      departed,
       schedule: raw.schedule,
       results: raw.results,
       finished: !!raw.finished,
@@ -1116,6 +1146,7 @@
       playerCount: state.playerCount,
       players: state.players,
       rosterIds: state.rosterIds,
+      departed: Array(state.playerCount).fill(false),
       schedule: generateSchedule(state.playerCount, Math.max(state.schedule.length, 1)),
       results: Array(Math.max(state.schedule.length, 1)).fill(null),
       finished: false,
@@ -1522,9 +1553,12 @@
     const wins = Array(s.playerCount).fill(0);
     s.schedule.forEach((r, i) => {
       const result = s.results[i];
-      for (let p = 0; p < s.playerCount; p++) {
-        if (!r.rest.includes(p)) played[p] += 1;
-      }
+      // Count actual team appearances, not "everyone not resting" — a
+      // round added after a player has left includes them in neither
+      // teamA/teamB nor rest (they're not in that round's player set at
+      // all), so the old inverse-of-rest count would have wrongly
+      // credited them with playing it.
+      [...r.teamA, ...r.teamB].forEach((p) => { played[p] += 1; });
       if (result === 'A') r.teamA.forEach((p) => { wins[p] += 1; });
       else if (result === 'B') r.teamB.forEach((p) => { wins[p] += 1; });
     });
@@ -1728,6 +1762,34 @@
     renderStandings();
     renderSchedule();
     renderFinishButton();
+    renderDepartedChecklist();
+  }
+
+  // "Farin heim": a player stays fully in the session (name, history,
+  // standings) but is excluded from future rounds once checked here. This
+  // is separate from the roster/guest concept — it's a per-night, one-way
+  // toggle for someone who's still part of tonight but done playing.
+  function renderDepartedChecklist() {
+    const box = document.getElementById('departed-checklist');
+    if (!box) return;
+    if (!state.playerCount) {
+      box.innerHTML = '<p class="empty-hint">Engir leikmenn ennþá.</p>';
+      return;
+    }
+    box.innerHTML = Array.from({ length: state.playerCount }, (_, idx) => `
+      <label class="roster-row">
+        <input type="checkbox" data-idx="${idx}" ${state.departed && state.departed[idx] ? 'checked' : ''}>
+        <span>${escapeHtml(playerName(idx))}</span>
+      </label>
+    `).join('');
+    box.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        const idx = Number(cb.dataset.idx);
+        if (!state.departed) state.departed = Array(state.playerCount).fill(false);
+        state.departed[idx] = cb.checked;
+        persist();
+      });
+    });
   }
 
   // Several buttons (new night, finish/resume, reshuffle, reset, add
@@ -1837,6 +1899,7 @@
     state.rosterIds = [...attendingIds, ...draftGuests.map(() => null)];
     state.players = [...attendingIds.map(rosterName), ...draftGuests];
     state.playerCount = totalCount;
+    state.departed = Array(totalCount).fill(false);
     state.schedule = generateSchedule(totalCount, roundCount);
     state.results = Array(roundCount).fill(null);
     state.finished = false;
@@ -1900,8 +1963,18 @@
     scrollToNext();
   }, hasResults);
 
+  function activePlayerIndices() {
+    return Array.from({ length: state.playerCount }, (_, i) => i)
+      .filter((i) => !(state.departed && state.departed[i]));
+  }
+
   function doAddGames(extra) {
-    state.schedule = appendRounds(state.playerCount, state.schedule, extra);
+    const active = activePlayerIndices();
+    if (active.length < MIN_PLAYERS) {
+      showError(`Þarf minnst ${MIN_PLAYERS} leikmenn sem eru ekki farnir heim`);
+      return;
+    }
+    state.schedule = appendRounds(active, state.schedule, extra);
     state.results = state.results.concat(Array(extra).fill(null));
     state.finished = false;
     renderAll();

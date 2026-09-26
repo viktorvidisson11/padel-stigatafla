@@ -793,6 +793,11 @@
     <div class="leaderboard" id="leaderboard"></div>
   </section>
 
+  <section class="card" id="free-riders-card" hidden>
+    <h2 class="label">Free riders</h2>
+    <div class="leaderboard" id="free-riders-list"></div>
+  </section>
+
   <section class="card">
     <h2 class="label">Allt planið</h2>
     <div class="schedule-list" id="schedule-list"></div>
@@ -1272,6 +1277,23 @@
       </div>
     `).join('');
 
+    const sanitized = sanitize(s);
+    const frRows = isNightOver(sanitized) ? computeFreeRidersFor(sanitized, hoddiRosterId()) : null;
+    const freeRidersHtml = frRows && frRows.length ? (() => {
+      const frLabels = rankLabels(frRows, (x) => Math.round(x.pct * 100));
+      return `
+        <h2 class="label" style="margin-top:16px;">Free riders</h2>
+        ${frRows.map((r, i) => `
+          <div class="lb-row ${frLabels[i] === frLabels[0] ? 'first' : ''}">
+            <div class="lb-rank">${frLabels[i]}</div>
+            <div class="lb-name">${escapeHtml(r.name)}</div>
+            <div></div>
+            <div class="lb-record">${Math.round(r.pct * 100)}%&nbsp;(${r.withHoddi}/${r.played})</div>
+          </div>
+        `).join('')}
+      `;
+    })() : '';
+
     const isCurrent = id === currentSessionId;
     const deleteHtml = isCurrent
       ? `<p class="empty-hint" style="margin-top:10px;">Ekki hægt að eyða kvöldinu sem er í gangi núna.</p>`
@@ -1283,7 +1305,7 @@
         </div>
       `;
 
-    box.innerHTML = standingsHtml + deleteHtml;
+    box.innerHTML = standingsHtml + freeRidersHtml + deleteHtml;
 
     if (!isCurrent) {
       const reasonInput = document.getElementById('delete-reason');
@@ -1371,6 +1393,7 @@
     onSnapshot(collection(db, 'roster'), (snap) => {
       rosterCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
       renderRosterChecklist();
+      renderFreeRiders();
     }, (err) => showError('Leikmannahópur: ' + (err && err.code ? err.code : 'óþekkt villa')));
   }
 
@@ -1393,6 +1416,8 @@
     const playerAgg = {};
     const pairAgg = {};
     const nemesis = {};
+    const freeRiderAgg = {};
+    const hoddiId = hoddiRosterId();
 
     function ensurePlayer(id) {
       if (!playerAgg[id]) playerAgg[id] = { wins: 0, played: 0 };
@@ -1400,6 +1425,9 @@
     function ensureNemesisPair(x, y) {
       if (!nemesis[x]) nemesis[x] = {};
       if (!nemesis[x][y]) nemesis[x][y] = { gamesAgainst: 0, lossesToOpp: 0 };
+    }
+    function ensureFreeRider(id) {
+      if (!freeRiderAgg[id]) freeRiderAgg[id] = { withHoddi: 0, played: 0 };
     }
 
     snap.forEach((docSnap) => {
@@ -1434,12 +1462,41 @@
           });
         });
       });
+
+      // Free riders: pure team composition, not results, so — unlike the
+      // aggregation above — every scheduled round counts, decided or not.
+      // Only counts nights Höddi was actually in; a session without him
+      // contributes nothing to anyone's numerator or denominator.
+      if (hoddiId) {
+        const hoddiIdx = s.rosterIds.indexOf(hoddiId);
+        if (hoddiIdx !== -1) {
+          s.schedule.forEach((r) => {
+            const team = r.teamA.includes(hoddiIdx) ? r.teamA : (r.teamB.includes(hoddiIdx) ? r.teamB : null);
+            [...r.teamA, ...r.teamB].forEach((idx) => {
+              if (idx === hoddiIdx) return;
+              const id = s.rosterIds[idx];
+              if (!id) return;
+              ensureFreeRider(id);
+              freeRiderAgg[id].played += 1;
+            });
+            if (team) {
+              team.forEach((idx) => {
+                if (idx === hoddiIdx) return;
+                const id = s.rosterIds[idx];
+                if (!id) return;
+                ensureFreeRider(id);
+                freeRiderAgg[id].withHoddi += 1;
+              });
+            }
+          });
+        }
+      }
     });
 
-    return { playerAgg, pairAgg, nemesis };
+    return { playerAgg, pairAgg, nemesis, freeRiderAgg };
   }
 
-  function renderSeasonStats({ playerAgg, pairAgg, nemesis }) {
+  function renderSeasonStats({ playerAgg, pairAgg, nemesis, freeRiderAgg }) {
     const box = document.getElementById('stats-content');
     box.hidden = false;
 
@@ -1530,6 +1587,23 @@
     const topPairs = pairRows.slice(0, 5);
     const pairLabels = rankLabels(topPairs, pctKey);
 
+    const freeRiderRows = Object.entries(freeRiderAgg || {})
+      .filter(([, v]) => v.played > 0)
+      .map(([id, v]) => ({ name: rosterName(id), withHoddi: v.withHoddi, played: v.played, pct: v.withHoddi / v.played }))
+      .sort((a, b) => b.pct - a.pct || b.withHoddi - a.withHoddi);
+    const freeRiderLabels = rankLabels(freeRiderRows, pctKey);
+    const freeRidersHtml = freeRiderRows.length ? `
+      <h3 class="stats-subhead">Free riders</h3>
+      ${freeRiderRows.map((p, i) => `
+        <div class="lb-row ${freeRiderLabels[i] === freeRiderLabels[0] ? 'first' : ''}">
+          <div class="lb-rank">${freeRiderLabels[i]}</div>
+          <div class="lb-name">${escapeHtml(p.name)}</div>
+          <div></div>
+          <div class="lb-record">${Math.round(p.pct * 100)}%&nbsp;(${p.withHoddi}/${p.played})</div>
+        </div>
+      `).join('')}
+    ` : '';
+
     box.innerHTML = `
       <h3 class="stats-subhead">Sigurhlutfall leikmanna</h3>
       ${playerRows.map((p, i) => `
@@ -1568,6 +1642,8 @@
           </tbody>
         </table>
       </div>
+
+      ${freeRidersHtml}
     `;
   }
 
@@ -1627,6 +1703,52 @@
       const name = raw && raw.trim ? raw.trim() : '';
       return { idx, name: name || `Leikmaður ${idx + 1}`, played: played[idx], wins: wins[idx] };
     });
+  }
+
+  // "Free riders": how often each player got to team up with the one
+  // specific roster member named "Höddi", as a fraction of their own games
+  // that night. Purely about team composition, not results — so unlike
+  // wins, every scheduled round counts (a round doesn't need a recorded
+  // result to know who was on which team), matching how "played" already
+  // works above. Only meaningful, and only shown, on nights Höddi actually
+  // played — a session where he wasn't in the roster has no free riders.
+  function hoddiRosterId() {
+    const p = rosterCache.find((x) => x.name && x.name.trim().toLowerCase() === 'höddi');
+    return p ? p.id : null;
+  }
+
+  function computeFreeRidersFor(s, hoddiId) {
+    if (!hoddiId || !Array.isArray(s.rosterIds)) return null;
+    const hoddiIdx = s.rosterIds.indexOf(hoddiId);
+    if (hoddiIdx === -1) return null;
+    const played = Array(s.playerCount).fill(0);
+    const withHoddi = Array(s.playerCount).fill(0);
+    s.schedule.forEach((r) => {
+      const team = r.teamA.includes(hoddiIdx) ? r.teamA : (r.teamB.includes(hoddiIdx) ? r.teamB : null);
+      [...r.teamA, ...r.teamB].forEach((idx) => { played[idx] += 1; });
+      if (team) team.forEach((idx) => { if (idx !== hoddiIdx) withHoddi[idx] += 1; });
+    });
+    return Array.from({ length: s.playerCount }, (_, idx) => idx)
+      .filter((idx) => idx !== hoddiIdx && played[idx] > 0)
+      .map((idx) => {
+        const raw = s.players[idx];
+        const name = raw && raw.trim ? raw.trim() : '';
+        return {
+          idx,
+          name: name || `Leikmaður ${idx + 1}`,
+          withHoddi: withHoddi[idx],
+          played: played[idx],
+          pct: withHoddi[idx] / played[idx],
+        };
+      })
+      .sort((a, b) => b.pct - a.pct || b.withHoddi - a.withHoddi);
+  }
+
+  // A night "counts" for free riders once it's actually over — either
+  // explicitly ended, or every scheduled round has a result — whether
+  // that's the live current night or one pulled from history.
+  function isNightOver(s) {
+    return !!s.finished || (Array.isArray(s.results) && s.results.length > 0 && !s.results.includes(null));
   }
 
   function computeStandings() {
@@ -1820,9 +1942,27 @@
   function renderAll() {
     renderNext();
     renderStandings();
+    renderFreeRiders();
     renderSchedule();
     renderFinishButton();
     renderDepartedChecklist();
+  }
+
+  function renderFreeRiders() {
+    const card = document.getElementById('free-riders-card');
+    if (!card) return;
+    const rows = isNightOver(state) ? computeFreeRidersFor(state, hoddiRosterId()) : null;
+    if (!rows || !rows.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const labels = rankLabels(rows, (x) => Math.round(x.pct * 100));
+    document.getElementById('free-riders-list').innerHTML = rows.map((row, idx) => `
+      <div class="lb-row ${labels[idx] === labels[0] ? 'first' : ''}">
+        <div class="lb-rank">${labels[idx]}</div>
+        <div class="lb-name">${escapeHtml(row.name)}</div>
+        <div></div>
+        <div class="lb-record">${Math.round(row.pct * 100)}%&nbsp;(${row.withHoddi}/${row.played})</div>
+      </div>
+    `).join('');
   }
 
   // "Farin heim": a player stays fully in the session (name, history,

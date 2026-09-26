@@ -1200,11 +1200,14 @@
 
   // Deleting a session writes a permanent record to `auditLog` first (who
   // can't be tracked without accounts, but when and why can) and only then
-  // removes the session doc — the log entry keeps a snapshot of what was
-  // deleted so it's still meaningful after the session itself is gone.
+  // removes the session doc. The log entry keeps a full `sessionSnapshot`
+  // (not just identifying fields) specifically so an accidental delete can
+  // be undone later from the audit log — everyone now has access to a
+  // shared production database, so "eyða" needs a real way back.
   async function deleteSession(s, reason) {
     if (!db) { showError('Þarf nettengingu'); return; }
     try {
+      const snapshot = { ...sanitize(s), createdAt: s.createdAt || null };
       await addDoc(collection(db, 'auditLog'), {
         type: 'session_deleted',
         sessionId: s.id,
@@ -1213,6 +1216,7 @@
         playerCount: s.playerCount || 0,
         players: Array.isArray(s.players) ? s.players : [],
         deletedAt: Date.now(),
+        sessionSnapshot: snapshot,
       });
       await deleteDoc(sessionDocRef(s.id));
       document.getElementById('history-list').hidden = true;
@@ -1220,6 +1224,33 @@
       await populateHistoryDropdown();
     } catch (e) {
       showError('Ekki tókst að eyða: ' + (e && e.code ? e.code : 'óþekkt villa'));
+    }
+  }
+
+  // Restores a deleted session as a brand-new `sessions` doc (its original
+  // `createdAt` is preserved so it reappears in its original spot in
+  // history) without touching `meta/current` — nobody's live view should
+  // jump to an old night just because someone restored it. Logs its own
+  // audit entry for traceability.
+  async function restoreDeletedSession(auditId, snapshot) {
+    if (!db) { showError('Þarf nettengingu'); return null; }
+    try {
+      const seed = sanitize(snapshot);
+      const ref = await addDoc(collection(db, 'sessions'), {
+        ...seed,
+        createdAt: snapshot.createdAt || Date.now(),
+      });
+      await addDoc(collection(db, 'auditLog'), {
+        type: 'session_restored',
+        sessionId: ref.id,
+        restoredFromAuditId: auditId,
+        deletedAt: Date.now(),
+      });
+      await populateHistoryDropdown();
+      return ref.id;
+    } catch (e) {
+      showError('Ekki tókst að endurvekja: ' + (e && e.code ? e.code : 'óþekkt villa'));
+      return null;
     }
   }
 
@@ -1248,6 +1279,7 @@
         <div class="delete-session-box">
           <input type="text" id="delete-reason" placeholder="Af hverju á að eyða þessu kvöldi?" maxlength="140">
           <button class="btn danger" id="delete-session-btn" type="button" disabled>Eyða þessu kvöldi</button>
+          <p class="empty-hint" style="margin-top:6px;">Hægt að endurvekja síðar úr Breytingaskrá ef þörf er á.</p>
         </div>
       `;
 
@@ -1285,17 +1317,41 @@
         const when = v.deletedAt
           ? new Date(v.deletedAt).toLocaleString('is-IS', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
           : '?';
+        if (v.type === 'session_restored') {
+          return `
+            <div class="audit-row">
+              <div><strong>Kvöld endurvakið</strong></div>
+              <div class="empty-hint" style="margin:0;">${escapeHtml(when)}</div>
+            </div>
+          `;
+        }
         const sessionWhen = v.sessionCreatedAt
           ? new Date(v.sessionCreatedAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
           : '?';
+        const canRestore = !!v.sessionSnapshot;
         return `
           <div class="audit-row">
             <div><strong>Kvöldi frá ${escapeHtml(sessionWhen)} eytt</strong></div>
             <div class="empty-hint" style="margin:2px 0 0;">Ástæða: ${escapeHtml(v.reason || '(engin skráð)')}</div>
             <div class="empty-hint" style="margin:0;">${escapeHtml(when)}</div>
+            ${canRestore
+              ? `<button class="btn" data-restore-audit="${d.id}" type="button" style="margin-top:6px;padding:4px 10px;font-size:0.75rem;">Endurvekja kvöldið</button>`
+              : `<div class="empty-hint" style="margin:4px 0 0;">(Ekki hægt að endurvekja — eytt fyrir þessa uppfærslu)</div>`}
           </div>
         `;
       }).join('');
+      box.querySelectorAll('[data-restore-audit]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const auditId = btn.dataset.restoreAudit;
+          const auditDoc = snap.docs.find((doc) => doc.id === auditId);
+          if (!auditDoc) return;
+          btn.disabled = true;
+          btn.textContent = 'Endurvekur...';
+          const newId = await restoreDeletedSession(auditId, auditDoc.data().sessionSnapshot);
+          btn.textContent = newId ? 'Endurvakið ✓ — sjá í Fyrri kvöld' : 'Endurvekja kvöldið';
+          btn.disabled = !!newId;
+        });
+      });
     } catch (e) {
       box.innerHTML = '<p class="empty-hint">Ekki tókst að sækja breytingaskrá.</p>';
     }

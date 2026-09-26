@@ -796,17 +796,17 @@
   <section id="next-section"></section>
 
   <section class="card" id="standings-card">
-    <h2 class="label">Staðan í kvöld</h2>
+    <h2 class="label" id="standings-heading">Staðan í kvöld</h2>
     <div class="leaderboard" id="leaderboard"></div>
   </section>
 
   <section class="card" id="free-riders-card" hidden>
-    <h2 class="label">Free riders</h2>
+    <h2 class="label" id="free-riders-heading">Free riders</h2>
     <div class="leaderboard" id="free-riders-list"></div>
   </section>
 
   <section class="card">
-    <h2 class="label">Allt planið</h2>
+    <h2 class="label" id="schedule-heading">Allt planið</h2>
     <div class="schedule-list" id="schedule-list"></div>
   </section>
 
@@ -1191,6 +1191,30 @@
     const dateStr = d.toLocaleDateString('is-IS', { day: 'numeric', month: 'long' });
     const timeStr = d.toLocaleTimeString('is-IS', { hour: '2-digit', minute: '2-digit' });
     el.textContent = `Í gangi frá ${dateStr}, kl. ${timeStr}`;
+  }
+
+  // The "Fyrri kvöld" preview box (further up the page) can show a
+  // completely different night's numbers, and once you've scrolled past
+  // it and its disclaimer, nothing lower on the page says which night
+  // "Staðan í kvöld" etc. actually belong to — they always track the one
+  // live current session, but that's easy to lose track of mid-scroll.
+  // Repeating the current night's date right in these headings means the
+  // answer is visible no matter where on the page you're looking, without
+  // having to scroll back up and remember a note.
+  function currentNightDateShort() {
+    if (!currentSessionCreatedAt) return '';
+    return new Date(currentSessionCreatedAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short' });
+  }
+
+  function renderNightLabels() {
+    const suffix = currentNightDateShort();
+    const label = suffix ? ` — ${suffix}` : '';
+    const standingsH = document.getElementById('standings-heading');
+    if (standingsH) standingsH.textContent = 'Staðan í kvöld' + label;
+    const scheduleH = document.getElementById('schedule-heading');
+    if (scheduleH) scheduleH.textContent = 'Allt planið' + label;
+    const freeRidersH = document.getElementById('free-riders-heading');
+    if (freeRidersH) freeRidersH.textContent = 'Free riders' + label;
   }
 
   let historySessionsCache = [];
@@ -1973,6 +1997,7 @@
     renderSchedule();
     renderFinishButton();
     renderDepartedChecklist();
+    renderNightLabels();
   }
 
   function renderFreeRiders() {

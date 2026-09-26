@@ -748,7 +748,7 @@
       <button class="btn reshuffle" id="new-session-btn" type="button">Nýtt kvöld</button>
     </div>
     <div class="setup-row" style="margin-top:10px;">
-      <span class="setup-label">Fyrri kvöld</span>
+      <span class="setup-label">Skoða kvöld</span>
       <select id="history-select" class="rc-input" style="width:auto;min-width:150px;text-align:left;">
         <option value="">Veldu kvöld...</option>
       </select>
@@ -1193,7 +1193,7 @@
     el.textContent = `Í gangi frá ${dateStr}, kl. ${timeStr}`;
   }
 
-  // The "Fyrri kvöld" preview box (further up the page) can show a
+  // The "Skoða kvöld" preview box (further up the page) can show a
   // completely different night's numbers, and once you've scrolled past
   // it and its disclaimer, nothing lower on the page says which night
   // "Staðan í kvöld" etc. actually belong to — they always track the one
@@ -1418,7 +1418,7 @@
           btn.disabled = true;
           btn.textContent = 'Endurvekur...';
           const newId = await restoreDeletedSession(auditId, auditDoc.data().sessionSnapshot);
-          btn.textContent = newId ? 'Endurvakið ✓ — sjá í Fyrri kvöld' : 'Endurvekja kvöldið';
+          btn.textContent = newId ? 'Endurvakið ✓ — sjá í Skoða kvöld' : 'Endurvekja kvöldið';
           btn.disabled = !!newId;
         });
       });

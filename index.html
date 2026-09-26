@@ -1433,8 +1433,13 @@
     snap.forEach((docSnap) => {
       const s = docSnap.data();
       if (!Array.isArray(s.rosterIds) || !Array.isArray(s.schedule) || !Array.isArray(s.results)) return;
+      const hoddiIdx = hoddiId ? s.rosterIds.indexOf(hoddiId) : -1;
       s.schedule.forEach((r, i) => {
         const result = s.results[i];
+        // A round without a recorded result never actually happened (e.g.
+        // a schedule generated for a night that was never played through)
+        // - skip it everywhere, free riders included, or leftover
+        // undecided rounds inflate everyone's totals.
         if (result !== 'A' && result !== 'B') return;
         const teamA = r.teamA.map((idx) => s.rosterIds[idx]);
         const teamB = r.teamB.map((idx) => s.rosterIds[idx]);
@@ -1461,36 +1466,29 @@
             ensureNemesisPair(y, x); nemesis[y][x].gamesAgainst += 1; if (result === 'A') nemesis[y][x].lossesToOpp += 1;
           });
         });
-      });
 
-      // Free riders: pure team composition, not results, so — unlike the
-      // aggregation above — every scheduled round counts, decided or not.
-      // Only counts nights Höddi was actually in; a session without him
-      // contributes nothing to anyone's numerator or denominator.
-      if (hoddiId) {
-        const hoddiIdx = s.rosterIds.indexOf(hoddiId);
+        // Free riders: only counts nights Höddi was actually in - a
+        // session without him contributes nothing to anyone's numbers.
         if (hoddiIdx !== -1) {
-          s.schedule.forEach((r) => {
-            const team = r.teamA.includes(hoddiIdx) ? r.teamA : (r.teamB.includes(hoddiIdx) ? r.teamB : null);
-            [...r.teamA, ...r.teamB].forEach((idx) => {
+          const team = r.teamA.includes(hoddiIdx) ? r.teamA : (r.teamB.includes(hoddiIdx) ? r.teamB : null);
+          [...r.teamA, ...r.teamB].forEach((idx) => {
+            if (idx === hoddiIdx) return;
+            const id = s.rosterIds[idx];
+            if (!id) return;
+            ensureFreeRider(id);
+            freeRiderAgg[id].played += 1;
+          });
+          if (team) {
+            team.forEach((idx) => {
               if (idx === hoddiIdx) return;
               const id = s.rosterIds[idx];
               if (!id) return;
               ensureFreeRider(id);
-              freeRiderAgg[id].played += 1;
+              freeRiderAgg[id].withHoddi += 1;
             });
-            if (team) {
-              team.forEach((idx) => {
-                if (idx === hoddiIdx) return;
-                const id = s.rosterIds[idx];
-                if (!id) return;
-                ensureFreeRider(id);
-                freeRiderAgg[id].withHoddi += 1;
-              });
-            }
-          });
+          }
         }
-      }
+      });
     });
 
     return { playerAgg, pairAgg, nemesis, freeRiderAgg };
@@ -1707,11 +1705,14 @@
 
   // "Free riders": how often each player got to team up with the one
   // specific roster member named "Höddi", as a fraction of their own games
-  // that night. Purely about team composition, not results — so unlike
-  // wins, every scheduled round counts (a round doesn't need a recorded
-  // result to know who was on which team), matching how "played" already
-  // works above. Only meaningful, and only shown, on nights Höddi actually
-  // played — a session where he wasn't in the roster has no free riders.
+  // that night. Only counts rounds with an actual recorded result — a
+  // round that's merely scheduled but was never played/decided isn't a
+  // real game, and counting it inflated everyone's totals whenever a
+  // session had leftover undecided rounds (e.g. a night where a schedule
+  // was generated but never actually played through). Same rule the
+  // win-rate stats below already use, applied here too. Only meaningful,
+  // and only shown, on nights Höddi actually played — a session where he
+  // wasn't in the roster has no free riders.
   function hoddiRosterId() {
     const p = rosterCache.find((x) => x.name && x.name.trim().toLowerCase() === 'höddi');
     return p ? p.id : null;
@@ -1723,7 +1724,9 @@
     if (hoddiIdx === -1) return null;
     const played = Array(s.playerCount).fill(0);
     const withHoddi = Array(s.playerCount).fill(0);
-    s.schedule.forEach((r) => {
+    s.schedule.forEach((r, i) => {
+      const result = s.results[i];
+      if (result !== 'A' && result !== 'B') return;
       const team = r.teamA.includes(hoddiIdx) ? r.teamA : (r.teamB.includes(hoddiIdx) ? r.teamB : null);
       [...r.teamA, ...r.teamB].forEach((idx) => { played[idx] += 1; });
       if (team) team.forEach((idx) => { if (idx !== hoddiIdx) withHoddi[idx] += 1; });

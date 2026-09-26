@@ -768,6 +768,10 @@
       <button class="btn" id="add-roster-btn" type="button">Bæta við</button>
     </div>
 
+    <h2 class="label" style="margin-top:16px;">Einhver seinn?</h2>
+    <p class="empty-hint">Hakaðu við þá sem eru ekki mættir strax — þeir verða ekki með í fyrstu leikjunum. Taktu hakið af (í "Ekki með í bili" hér að neðan) þegar þeir mæta.</p>
+    <div class="roster-checklist" id="late-checklist"></div>
+
     <h2 class="label" style="margin-top:16px;">Gestir í kvöld</h2>
     <div class="guest-chips" id="guest-chips"></div>
     <div class="add-row">
@@ -809,8 +813,8 @@
     <button class="btn danger" id="reset-btn" type="button">Núllstilla úrslit</button>
   </div>
   <section class="card" id="departed-panel">
-    <h2 class="label">Farin heim í kvöld</h2>
-    <p class="empty-hint">Hakaðu við þann sem er farinn — hann verður ekki með þegar bætt er við fleiri leikjum, en heldur sinni stöðu og sögu það sem af er.</p>
+    <h2 class="label">Ekki með í bili</h2>
+    <p class="empty-hint">Hakaðu við þann sem er farinn heim eða ekki mættur enn — hann verður ekki með þegar bætt er við fleiri leikjum, en heldur sinni stöðu og sögu það sem af er. Taktu hakið af um leið og seinn leikmaður mætir.</p>
     <div id="departed-checklist"></div>
   </section>
 
@@ -1812,6 +1816,7 @@
   // ---- Setup card: attendance (roster + guests) + round count ---------
 
   let draftAttendance = new Set();
+  let draftLate = new Set();
   let draftGuests = [];
 
   function renderRosterChecklist() {
@@ -1830,6 +1835,33 @@
       cb.addEventListener('change', () => {
         if (cb.checked) draftAttendance.add(cb.dataset.rosterId);
         else draftAttendance.delete(cb.dataset.rosterId);
+        renderLateChecklist();
+      });
+    });
+  }
+
+  // Only players who are checked in as attending tonight can be marked
+  // "seinn" (late) — a late player is still playing tonight, just not from
+  // round 1. Unchecking them here doesn't remove them from "seinn"; the
+  // filter below prunes anyone who fell out of attendance entirely.
+  function renderLateChecklist() {
+    const box = document.getElementById('late-checklist');
+    const attendees = rosterCache.filter((p) => draftAttendance.has(p.id));
+    [...draftLate].forEach((id) => { if (!draftAttendance.has(id)) draftLate.delete(id); });
+    if (!attendees.length) {
+      box.innerHTML = '<p class="empty-hint">Hakaðu fyrst við hverjir spila að ofan.</p>';
+      return;
+    }
+    box.innerHTML = attendees.map((p) => `
+      <label class="roster-row">
+        <input type="checkbox" data-late-id="${p.id}" ${draftLate.has(p.id) ? 'checked' : ''}>
+        <span>${escapeHtml(p.name)}</span>
+      </label>
+    `).join('');
+    box.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      cb.addEventListener('change', () => {
+        if (cb.checked) draftLate.add(cb.dataset.lateId);
+        else draftLate.delete(cb.dataset.lateId);
       });
     });
   }
@@ -1854,9 +1886,11 @@
   function renderSetup() {
     if (!inSetupCard()) {
       draftAttendance = new Set((state.rosterIds || []).filter(Boolean));
+      draftLate = new Set();
       document.getElementById('rc-input').value = state.schedule.length || 15;
     }
     renderRosterChecklist();
+    renderLateChecklist();
   }
 
   document.getElementById('add-roster-btn').addEventListener('click', async () => {
@@ -1869,6 +1903,7 @@
       draftAttendance.add(ref.id);
       input.value = '';
       renderRosterChecklist();
+      renderLateChecklist();
     } catch (e) {
       showError('Ekki tókst að bæta við leikmanni: ' + (e && e.code ? e.code : 'óþekkt villa'));
     }
@@ -1896,14 +1931,27 @@
       showError(`Mest ${MAX_PLAYERS} leikmenn í einu`);
       return;
     }
+    // Late players occupy an index like everyone else, but are marked
+    // departed from the start so the very first rounds are built without
+    // them — same mechanism "Ekki með í bili" already uses for someone who
+    // leaves early, just applied before round 1 instead of mid-plan.
+    const lateIndexSet = new Set();
+    attendingIds.forEach((id, i) => { if (draftLate.has(id)) lateIndexSet.add(i); });
+    const initialActive = Array.from({ length: totalCount }, (_, i) => i)
+      .filter((i) => !lateIndexSet.has(i));
+    if (initialActive.length < MIN_PLAYERS) {
+      showError(`Þarf minnst ${MIN_PLAYERS} leikmenn sem eru ekki merktir seinir til að byrja`);
+      return;
+    }
     state.rosterIds = [...attendingIds, ...draftGuests.map(() => null)];
     state.players = [...attendingIds.map(rosterName), ...draftGuests];
     state.playerCount = totalCount;
-    state.departed = Array(totalCount).fill(false);
-    state.schedule = generateSchedule(totalCount, roundCount);
+    state.departed = Array.from({ length: totalCount }, (_, i) => lateIndexSet.has(i));
+    state.schedule = appendRounds(initialActive, [], roundCount);
     state.results = Array(roundCount).fill(null);
     state.finished = false;
     draftGuests = [];
+    draftLate = new Set();
     renderGuestChips();
     renderAll();
     renderSetup();

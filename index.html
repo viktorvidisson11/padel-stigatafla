@@ -173,6 +173,13 @@
     margin-top: 10px;
   }
 
+  .history-list:not(:empty) {
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+  }
+
   .delete-session-box {
     display: flex;
     flex-direction: column;
@@ -1266,6 +1273,24 @@
     const s = historySessionsCache.find((x) => x.id === id);
     if (!s) return;
     box.hidden = false;
+
+    // This box is only a read-only snapshot of the SELECTED past night —
+    // it doesn't change what "Staðan í kvöld", "Free riders" or "Allt
+    // planið" show further down the page, since those always track the
+    // one live current session for everyone. Without a clear label here,
+    // it's easy to think this box IS the rest of the page updating, when
+    // it's really just this small preview sitting above unrelated,
+    // unchanged content.
+    const isCurrent = id === currentSessionId;
+    const dateStr = s.createdAt
+      ? new Date(s.createdAt).toLocaleDateString('is-IS', { day: 'numeric', month: 'short', year: 'numeric' })
+        + ', kl. ' + new Date(s.createdAt).toLocaleTimeString('is-IS', { hour: '2-digit', minute: '2-digit' })
+      : '?';
+    const headingHtml = `
+      <h2 class="label" style="margin:0 0 10px;">${escapeHtml(dateStr)}</h2>
+      <p class="empty-hint" style="margin:0 0 10px;">Yfirlit fyrir þetta kvöld eingöngu${isCurrent ? ' (kvöldið sem er í gangi núna)' : ' — restin af síðunni fyrir neðan sýnir alltaf kvöldið sem er í gangi núna, ekki þetta'}.</p>
+    `;
+
     const rows = computeStandingsFor(sanitize(s)).sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
     const labels = rankLabels(rows);
     const standingsHtml = rows.map((r, i) => `
@@ -1294,7 +1319,6 @@
       `;
     })() : '';
 
-    const isCurrent = id === currentSessionId;
     const deleteHtml = isCurrent
       ? `<p class="empty-hint" style="margin-top:10px;">Ekki hægt að eyða kvöldinu sem er í gangi núna.</p>`
       : `
@@ -1305,7 +1329,7 @@
         </div>
       `;
 
-    box.innerHTML = standingsHtml + freeRidersHtml + deleteHtml;
+    box.innerHTML = headingHtml + standingsHtml + freeRidersHtml + deleteHtml;
 
     if (!isCurrent) {
       const reasonInput = document.getElementById('delete-reason');

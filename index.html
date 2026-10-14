@@ -937,14 +937,15 @@
   //
   // Fairness is tracked by games PLAYED (not rest count): whoever has
   // played the most so far is the one asked to sit out next, whenever
-  // that's possible without resting the same person twice in a row. Using
-  // played-count directly (rather than inferring fairness from rest
-  // history) is what makes this self-correct after a round gets deleted —
-  // e.g. a player who arrived late and had their early (wrongly
-  // scheduled) rounds removed will, correctly, still show fewer games
-  // played than everyone else, and so gets prioritized to play more from
-  // here on rather than being treated as "already had their fair share of
-  // rest".
+  // that's possible without resting the same person twice in a row.
+  //
+  // A player who wasn't around for a round (arrived late, was away, or
+  // their wrongly-scheduled early rounds were deleted) appears in neither
+  // its teams nor its rest list. For each such round they're credited
+  // their fair share of it (4 / players present) — so from the moment they
+  // join they simply rotate in like everyone else, rather than being
+  // prioritized to catch up on the games they missed. Arriving late just
+  // means playing fewer games that night.
   function appendRounds(activeIndices, existingSchedule, extraCount) {
     const players = activeIndices.slice();
     const playedCount = {};
@@ -956,6 +957,9 @@
     let lastRest = new Set();
 
     existingSchedule.forEach((r) => {
+      const present = new Set([...r.teamA, ...r.teamB, ...r.rest]);
+      const fairShare = 4 / present.size;
+      players.forEach((p) => { if (!present.has(p)) playedCount[p] += fairShare; });
       [...r.teamA, ...r.teamB].forEach((p) => { if (p in playedCount) playedCount[p] += 1; });
       const keyA = pairKey(r.teamA[0], r.teamA[1]);
       if (keyA in partnerCount) partnerCount[keyA] += 1;
@@ -972,7 +976,11 @@
       if (restersNeeded > 0) {
         const eligible = players.filter((p) => !lastRest.has(p));
         const fallback = players.filter((p) => lastRest.has(p));
-        const byMostPlayed = (a, b) => playedCount[b] - playedCount[a] || Math.random() - 0.5;
+        // Tolerance because missed-round credit is fractional (e.g. 4/5).
+        const byMostPlayed = (a, b) => {
+          const d = playedCount[b] - playedCount[a];
+          return Math.abs(d) > 1e-9 ? d : Math.random() - 0.5;
+        };
         eligible.sort(byMostPlayed);
         fallback.sort(byMostPlayed);
         resters = eligible.length >= restersNeeded
@@ -1059,28 +1067,21 @@
   }
 
   // "Leikjaplan": two teams just play each other every round. With three
-  // teams, the team that has played the most rests (ties: the one that
-  // rested longest ago, then the highest-numbered) — with everyone present
-  // from the start that's the plain rotation 1v2, 1v3, 2v3, … where each
-  // team rests every third game; a team that arrived late gets to catch
-  // up on games, same played-count fairness as the normal scheduler.
+  // teams it's a plain rotation 1v2, 1v3, 2v3, …: the team that rested
+  // longest ago (or never) rests next, ties going to the highest-numbered
+  // team. A team that arrives late just joins the rotation — no catching
+  // up on missed games.
   function nextFixedPlanRound(teams, schedule, departed) {
     if (teams.length === 2) return [0, 1, null];
     const avail = [0, 1, 2].filter((t) => teamAvailable(teams[t], departed));
     if (avail.length < 2) return null;
     if (avail.length === 2) return [avail[0], avail[1], 3 - avail[0] - avail[1]];
-    const played = [0, 0, 0];
     const lastRest = [-1, -1, -1];
     schedule.forEach((r, i) => {
-      teams.forEach((t, k) => {
-        if (sameTeam(t, r.teamA) || sameTeam(t, r.teamB)) played[k] += 1;
-        else if (sameTeam(t, r.rest)) lastRest[k] = i;
-      });
+      teams.forEach((t, k) => { if (sameTeam(t, r.rest)) lastRest[k] = i; });
     });
     let rest = 2;
-    [1, 0].forEach((k) => {
-      if (played[k] > played[rest] || (played[k] === played[rest] && lastRest[k] < lastRest[rest])) rest = k;
-    });
+    [1, 0].forEach((k) => { if (lastRest[k] < lastRest[rest]) rest = k; });
     const [a, b] = [0, 1, 2].filter((k) => k !== rest);
     return [a, b, rest];
   }

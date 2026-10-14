@@ -516,9 +516,15 @@
     display: inline-block;
   }
 
+  .finished-banner .banner-btn {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+  }
+
   .finished-banner .resume-link {
     display: block;
-    margin-top: 10px;
+    margin: 10px auto 0;
     font-size: 0.82rem;
     color: var(--muted);
     background: none;
@@ -730,9 +736,34 @@
   }
 
   .error-banner.show { display: block; }
+
+  /* A finished night is read-only until someone taps "Breyta leikjum":
+     every control that can change tonight's games is hidden, and the
+     remaining result buttons in "Allt planið" stop responding. */
+  .wrap.locked .edit-only,
+  .wrap.locked .round-delete-btn { display: none !important; }
+  .wrap.locked .round-team-btn { pointer-events: none; cursor: default; }
+
+  [hidden] { display: none !important; }
+
+  .fixed-team-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+  }
+  .fixed-team-row .setup-label { flex: none; width: 52px; }
+  .fixed-team-row select { flex: 1; min-width: 0; text-align: left; width: auto; }
+
+  .finished-banner .sub {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
 </style>
 
-<div class="wrap">
+<div class="wrap" id="app-wrap">
   <div class="topbar">
     <h1 class="display">Padel</h1>
     <div class="status live" id="status">
@@ -767,7 +798,7 @@
     <div id="stats-content" hidden></div>
   </section>
 
-  <section class="card" id="setup-card">
+  <section class="card edit-only" id="setup-card">
     <h2 class="label">Hverjir spila í kvöld?</h2>
     <div class="roster-checklist" id="roster-checklist"></div>
     <div class="add-row">
@@ -786,11 +817,20 @@
       <button class="btn" id="add-guest-btn" type="button">Bæta við gesti</button>
     </div>
 
+    <div id="fixed-teams-block" hidden>
+      <button class="btn" id="fixed-teams-toggle" type="button" style="width:100%;margin-top:16px;">Föst lið</button>
+      <div id="fixed-teams-panel" hidden></div>
+    </div>
+
     <div class="setup-row" style="margin-top:16px;">
       <span class="setup-label">Fjöldi leikja</span>
       <input type="number" id="rc-input" class="rc-input" min="1" max="99" value="15" inputmode="numeric">
     </div>
     <button class="apply-btn" id="apply-setup-btn" type="button">Búa til leikjaplan</button>
+    <div class="toolbar" id="fixed-mode-btns" hidden>
+      <button class="btn reshuffle" id="fixed-plan-btn" type="button">Leikjaplan</button>
+      <button class="btn reshuffle" id="fixed-winner-btn" type="button">Winner stays</button>
+    </div>
   </section>
 
   <section id="next-section"></section>
@@ -810,27 +850,27 @@
     <div class="schedule-list" id="schedule-list"></div>
   </section>
 
-  <div class="toolbar">
+  <div class="toolbar edit-only">
     <button class="btn" id="manual-game-btn" type="button">+ Bæta við handvirkum leik</button>
   </div>
-  <section class="card" id="manual-game-panel" hidden>
+  <section class="card edit-only" id="manual-game-panel" hidden>
     <h2 class="label">Handvirkur leikur</h2>
     <p class="empty-hint">Veldu tvo í lið A og tvo í lið B — gott þegar leikmenn týnast inn/út og planið passar ekki lengur.</p>
     <div id="manual-game-players"></div>
     <button class="apply-btn" id="manual-game-submit" type="button" disabled>Bæta við leik</button>
   </section>
 
-  <div class="toolbar">
+  <div class="toolbar edit-only">
     <button class="btn reshuffle" id="reshuffle-btn" type="button">Endurraða</button>
     <button class="btn danger" id="reset-btn" type="button">Núllstilla úrslit</button>
   </div>
-  <section class="card" id="departed-panel">
+  <section class="card edit-only" id="departed-panel">
     <h2 class="label">Ekki með í bili</h2>
     <p class="empty-hint">Hakaðu við þann sem er farinn heim eða ekki mættur enn — hann verður ekki með þegar bætt er við fleiri leikjum, en heldur sinni stöðu og sögu það sem af er. Taktu hakið af um leið og seinn leikmaður mætir.</p>
     <div id="departed-checklist"></div>
   </section>
 
-  <div class="toolbar">
+  <div class="toolbar edit-only" id="add-games-toolbar">
     <div class="add-games">
       <input type="number" id="add-count" class="rc-input" min="1" max="50" value="5" inputmode="numeric" aria-label="Fjöldi leikja sem á að bæta við">
       <button class="btn" id="add-games-btn" type="button">Bæta við leikjum</button>
@@ -980,6 +1020,82 @@
     return appendRounds(Array.from({ length: playerCount }, (_, i) => i), [], roundCount);
   }
 
+  // ---- Föst lið (fixed teams) -------------------------------------------
+  //
+  // With exactly 4 or 6 players the group can lock in 2 or 3 fixed pairs
+  // for the whole night. Stored on the session as
+  // `fixedTeams: { pairs: [a, b, c, d(, e, f)], mode: 'plan' | 'winner' }`
+  // — a flat list (team k = pairs[2k], pairs[2k+1]) because Firestore
+  // can't store nested arrays. Rounds themselves stay ordinary
+  // {round, rest, teamA, teamB} entries, so standings, stats and "Allt
+  // planið" need no special handling.
+
+  function fixedTeamList(ft) {
+    const teams = [];
+    for (let i = 0; i + 1 < ft.pairs.length; i += 2) teams.push([ft.pairs[i], ft.pairs[i + 1]]);
+    return teams;
+  }
+
+  function sameTeam(x, y) {
+    return x.length === 2 && y.length === 2
+      && ((x[0] === y[0] && x[1] === y[1]) || (x[0] === y[1] && x[1] === y[0]));
+  }
+
+  function fixedRound(teams, a, b, rest, roundNo) {
+    return {
+      round: roundNo,
+      rest: rest === null ? [] : teams[rest].slice(),
+      teamA: teams[a].slice(),
+      teamB: teams[b].slice(),
+    };
+  }
+
+  // "Leikjaplan": two teams just play each other every round; three teams
+  // rotate 1v2, 3v1, 2v3 so each team rests every third game and never
+  // plays more than two in a row.
+  const FIXED_ROTATION = [[0, 1, 2], [2, 0, 1], [1, 2, 0]];
+
+  function appendFixedPlanRounds(teams, existingSchedule, extraCount) {
+    const out = existingSchedule.slice();
+    for (let n = 0; n < extraCount; n++) {
+      const [a, b, rest] = teams.length === 2 ? [0, 1, null] : FIXED_ROTATION[out.length % 3];
+      out.push(fixedRound(teams, a, b, rest, out.length + 1));
+    }
+    return out;
+  }
+
+  // "Winner stays": the first game is two random teams; after that the
+  // schedule always ends one round past the last decided game — winner of
+  // that game vs. whichever team sat it out. Re-run after every result
+  // change, so correcting (or clearing) the latest result immediately
+  // re-points the next game. A finished night gets no pending next game.
+  function startWinnerStays(teams) {
+    const order = [0, 1, 2].sort(() => Math.random() - 0.5);
+    return [fixedRound(teams, order[0], order[1], order[2], 1)];
+  }
+
+  function syncWinnerStays(teams, schedule, results, finished) {
+    let last = -1;
+    results.forEach((r, i) => { if (r === 'A' || r === 'B') last = i; });
+    const keep = finished && last >= 0 ? last + 1 : Math.max(last + 1, Math.min(1, schedule.length));
+    const outSchedule = schedule.slice(0, keep);
+    const outResults = results.slice(0, keep);
+    if (!finished && last >= 0) {
+      const r = outSchedule[last];
+      const winner = results[last] === 'A' ? r.teamA : r.teamB;
+      const loser = results[last] === 'A' ? r.teamB : r.teamA;
+      const wi = teams.findIndex((t) => sameTeam(t, winner));
+      const li = teams.findIndex((t) => sameTeam(t, loser));
+      // A hand-entered round that doesn't match the fixed teams has no
+      // well-defined "next" game — leave it to the user.
+      if (wi !== -1 && li !== -1 && wi !== li) {
+        outSchedule.push(fixedRound(teams, wi, 3 - wi - li, li, outSchedule.length + 1));
+        outResults.push(null);
+      }
+    }
+    return { schedule: outSchedule, results: outResults };
+  }
+
   // ---- State -------------------------------------------------------------
   //
   // `players`/`rosterIds` are parallel arrays indexed exactly like the
@@ -1001,7 +1117,17 @@
       schedule: [],
       results: [],
       finished: false,
+      fixedTeams: null,
     };
+  }
+
+  function sanitizeFixedTeams(ft, playerCount) {
+    if (!ft || typeof ft !== 'object' || !Array.isArray(ft.pairs)) return null;
+    if (ft.pairs.length !== 4 && ft.pairs.length !== 6) return null;
+    if (!ft.pairs.every((i) => Number.isInteger(i) && i >= 0 && i < playerCount)) return null;
+    if (new Set(ft.pairs).size !== ft.pairs.length) return null;
+    const mode = ft.mode === 'winner' && ft.pairs.length === 6 ? 'winner' : 'plan';
+    return { pairs: ft.pairs.slice(), mode };
   }
 
   function isValidState(raw) {
@@ -1032,10 +1158,21 @@
       schedule: raw.schedule,
       results: raw.results,
       finished: !!raw.finished,
+      fixedTeams: sanitizeFixedTeams(raw.fixedTeams, raw.playerCount),
     };
   }
 
   let state = defaultState();
+
+  // Per-device only (never persisted): whether this tab has temporarily
+  // unlocked a finished night for corrections via "Breyta leikjum".
+  // "Vista" locks it again. Every edit made meanwhile is still persisted
+  // live as usual — "Vista" just ends the editing mode.
+  let editUnlocked = false;
+
+  function isLocked() {
+    return state.finished && !editUnlocked && state.schedule.length > 0;
+  }
 
   function loadLocal() {
     try {
@@ -1106,6 +1243,7 @@
 
   function subscribeToSession(id) {
     if (sessionUnsub) sessionUnsub();
+    if (id !== currentSessionId) editUnlocked = false;
     currentSessionId = id;
     sessionUnsub = onSnapshot(sessionDocRef(id), (snap) => {
       if (!snap.exists()) return;
@@ -1166,6 +1304,7 @@
       schedule: generateSchedule(state.playerCount, Math.max(state.schedule.length, 1)),
       results: Array(Math.max(state.schedule.length, 1)).fill(null),
       finished: false,
+      fixedTeams: null,
     });
     await populateHistoryDropdown();
   }
@@ -1190,7 +1329,9 @@
     const d = new Date(currentSessionCreatedAt);
     const dateStr = d.toLocaleDateString('is-IS', { day: 'numeric', month: 'long' });
     const timeStr = d.toLocaleTimeString('is-IS', { hour: '2-digit', minute: '2-digit' });
-    el.textContent = `Í gangi frá ${dateStr}, kl. ${timeStr}`;
+    el.textContent = state.finished
+      ? `Lokið — kvöldið ${dateStr}, kl. ${timeStr}`
+      : `Í gangi frá ${dateStr}, kl. ${timeStr}`;
   }
 
   // The "Skoða kvöld" preview box (further up the page) can show a
@@ -1850,8 +1991,21 @@
     return indices.map((i) => playerName(i)).join(' & ');
   }
 
+  function isWinnerStays() {
+    return !!(state.fixedTeams && state.fixedTeams.mode === 'winner');
+  }
+
+  function applyWinnerStays() {
+    if (!isWinnerStays()) return;
+    const out = syncWinnerStays(fixedTeamList(state.fixedTeams), state.schedule, state.results, state.finished);
+    state.schedule = out.schedule;
+    state.results = out.results;
+  }
+
   function setWinner(roundIdx, winner) {
+    if (isLocked()) return;
     state.results[roundIdx] = state.results[roundIdx] === winner ? null : winner;
+    applyWinnerStays();
     renderAll();
     persist();
   }
@@ -1871,11 +2025,37 @@
     const nextIdx = state.results.findIndex((r) => r === null);
     const allPlayed = nextIdx === -1;
 
-    if (state.finished || allPlayed) {
-      const headline = state.finished && !allPlayed ? 'Leiknum lokað' : 'Allir leikir spilaðir 🏆';
-      const resumeLink = state.finished && !allPlayed
-        ? `<button class="resume-link" id="resume-link">Halda áfram að spila</button>`
-        : '';
+    if (state.finished) {
+      section.innerHTML = editUnlocked
+        ? `
+          <div class="card finished-banner">
+            <span class="headline">Breytingahamur</span>
+            <span class="sub">Kvöldinu er lokið en hægt að leiðrétta leiki. Ýttu á Vista þegar þú ert búinn.</span>
+            <button class="btn reshuffle banner-btn" id="save-edits-link" type="button">Vista</button>
+            <button class="resume-link" id="resume-link">Halda áfram að spila (opna kvöldið aftur)</button>
+          </div>`
+        : `
+          <div class="card finished-banner">
+            <span class="headline">Kvöldinu lokið 🏆</span>
+            <span class="sub">Aðeins til skoðunar.</span>
+            <button class="btn banner-btn" id="edit-games-link" type="button">Breyta leikjum</button>
+          </div>`;
+      const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
+      on('edit-games-link', () => { editUnlocked = true; renderAll(); });
+      on('save-edits-link', () => { editUnlocked = false; renderAll(); scrollToNext(); });
+      on('resume-link', () => {
+        state.finished = false;
+        editUnlocked = false;
+        applyWinnerStays();
+        renderAll();
+        renderSessionInfo();
+        persist();
+      });
+      return;
+    }
+
+    if (allPlayed) {
+      const headline = 'Allir leikir spilaðir 🏆';
       // Naturally finishing the plan (not manually ending it early) offers
       // a one-tap way to keep playing the same night, without needing to
       // scroll down to the "Bæta við leikjum" control.
@@ -1885,18 +2065,9 @@
       section.innerHTML = `
         <div class="card finished-banner">
           <span class="headline">${headline}</span>
-          ${resumeLink}
           ${addMoreLink}
         </div>
       `;
-      const resumeBtn = document.getElementById('resume-link');
-      if (resumeBtn) {
-        resumeBtn.addEventListener('click', () => {
-          state.finished = false;
-          renderAll();
-          persist();
-        });
-      }
       const addMoreBtn = document.getElementById('add-more-link');
       if (addMoreBtn) {
         addMoreBtn.addEventListener('click', () => doAddGames(5));
@@ -1912,7 +2083,7 @@
       <div class="card next-card">
         <div class="next-header">
           <h2 class="label">Næsti leikur</h2>
-          <span class="next-round-num">Leikur ${r.round} / ${state.schedule.length}</span>
+          <span class="next-round-num">${isWinnerStays() ? `Leikur ${r.round} · Winner stays` : `Leikur ${r.round} / ${state.schedule.length}`}</span>
         </div>
         ${restHtml}
         <div class="teams">
@@ -1977,20 +2148,24 @@
   // them. Renumbers the remaining rounds so the display stays 1..N with
   // no gaps.
   function deleteRound(idx) {
+    if (isLocked()) return;
     state.schedule.splice(idx, 1);
     state.results.splice(idx, 1);
     state.schedule.forEach((r, i) => { r.round = i + 1; });
+    applyWinnerStays();
     renderAll();
     persist();
   }
 
   function renderFinishButton() {
     const btn = document.getElementById('finish-btn');
-    btn.textContent = state.finished ? 'Halda áfram að spila' : 'Ljúka leik núna';
+    btn.textContent = !state.finished ? 'Ljúka leik núna' : (editUnlocked ? 'Vista' : 'Breyta leikjum');
     btn.classList.toggle('reshuffle', state.finished);
   }
 
   function renderAll() {
+    document.getElementById('app-wrap').classList.toggle('locked', isLocked());
+    document.getElementById('add-games-toolbar').hidden = isWinnerStays();
     renderNext();
     renderStandings();
     renderFreeRiders();
@@ -1998,6 +2173,7 @@
     renderFinishButton();
     renderDepartedChecklist();
     renderNightLabels();
+    renderSessionInfo();
   }
 
   function renderFreeRiders() {
@@ -2066,6 +2242,65 @@
   let draftAttendance = new Set();
   let draftLate = new Set();
   let draftGuests = [];
+  // Föst lið draft: the toggle, plus one selected player key per slot
+  // (team k = slots 2k and 2k+1). Keys are 'r:<rosterId>' or 'g:<guest
+  // index>' since real player indices only exist once the plan is built.
+  let draftFixedOn = false;
+  let draftFixedSel = Array(6).fill('');
+
+  function draftPlayerOptions() {
+    return [
+      ...rosterCache.filter((p) => draftAttendance.has(p.id)).map((p) => ({ key: 'r:' + p.id, name: p.name })),
+      ...draftGuests.map((name, i) => ({ key: 'g:' + i, name })),
+    ];
+  }
+
+  function renderFixedTeams() {
+    const options = draftPlayerOptions();
+    const count = options.length;
+    const eligible = count === 4 || count === 6;
+    const fixedOn = eligible && draftFixedOn;
+    const teamCount = count / 2;
+    document.getElementById('fixed-teams-block').hidden = !eligible;
+    const toggle = document.getElementById('fixed-teams-toggle');
+    toggle.textContent = fixedOn ? 'Föst lið ✓' : 'Föst lið';
+    toggle.classList.toggle('reshuffle', fixedOn);
+    const panel = document.getElementById('fixed-teams-panel');
+    panel.hidden = !fixedOn;
+    document.getElementById('apply-setup-btn').hidden = fixedOn && teamCount === 3;
+    document.getElementById('fixed-mode-btns').hidden = !(fixedOn && teamCount === 3);
+    if (!fixedOn) return;
+
+    // Drop selections for players no longer attending (or slots beyond
+    // the current team count).
+    const valid = new Set(options.map((o) => o.key));
+    draftFixedSel = draftFixedSel.map((k, i) => (i < count && valid.has(k) ? k : ''));
+    let html = '';
+    for (let t = 0; t < teamCount; t++) {
+      html += `<div class="fixed-team-row"><span class="setup-label">Lið ${t + 1}</span>`;
+      for (let j = 0; j < 2; j++) {
+        const slot = t * 2 + j;
+        const takenElsewhere = new Set(draftFixedSel.filter((k, i) => k && i !== slot));
+        html += `<select class="rc-input" data-slot="${slot}" aria-label="Lið ${t + 1}, leikmaður ${j + 1}">
+          <option value="">Veldu...</option>
+          ${options.map((o) => `<option value="${o.key}" ${draftFixedSel[slot] === o.key ? 'selected' : ''} ${takenElsewhere.has(o.key) ? 'disabled' : ''}>${escapeHtml(o.name)}</option>`).join('')}
+        </select>`;
+      }
+      html += '</div>';
+    }
+    panel.innerHTML = html;
+    panel.querySelectorAll('select').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        draftFixedSel[Number(sel.dataset.slot)] = sel.value;
+        renderFixedTeams();
+      });
+    });
+  }
+
+  document.getElementById('fixed-teams-toggle').addEventListener('click', () => {
+    draftFixedOn = !draftFixedOn;
+    renderFixedTeams();
+  });
 
   function renderRosterChecklist() {
     const box = document.getElementById('roster-checklist');
@@ -2084,6 +2319,7 @@
         if (cb.checked) draftAttendance.add(cb.dataset.rosterId);
         else draftAttendance.delete(cb.dataset.rosterId);
         renderLateChecklist();
+        renderFixedTeams();
       });
     });
   }
@@ -2122,7 +2358,11 @@
     box.querySelectorAll('[data-remove-guest]').forEach((btn) => {
       btn.addEventListener('click', () => {
         draftGuests.splice(Number(btn.dataset.removeGuest), 1);
+        // Guest keys are positional, so clear any selection that pointed
+        // at a guest rather than let it silently shift to the next one.
+        draftFixedSel = draftFixedSel.map((k) => (k.startsWith('g:') ? '' : k));
         renderGuestChips();
+        renderFixedTeams();
       });
     });
   }
@@ -2139,6 +2379,7 @@
     }
     renderRosterChecklist();
     renderLateChecklist();
+    renderFixedTeams();
   }
 
   document.getElementById('add-roster-btn').addEventListener('click', async () => {
@@ -2152,6 +2393,7 @@
       input.value = '';
       renderRosterChecklist();
       renderLateChecklist();
+      renderFixedTeams();
     } catch (e) {
       showError('Ekki tókst að bæta við leikmanni: ' + (e && e.code ? e.code : 'óþekkt villa'));
     }
@@ -2164,9 +2406,10 @@
     draftGuests.push(name);
     input.value = '';
     renderGuestChips();
+    renderFixedTeams();
   });
 
-  function doApplySetup() {
+  function doApplySetup(fixedMode) {
     const rcInput = document.getElementById('rc-input');
     const roundCount = Math.max(1, Math.min(99, parseInt(rcInput.value, 10) || 15));
     const attendingIds = [...draftAttendance];
@@ -2191,13 +2434,40 @@
       showError(`Þarf minnst ${MIN_PLAYERS} leikmenn sem eru ekki merktir seinir til að byrja`);
       return;
     }
+    // Föst lið: map each selected slot to its final player index (roster
+    // players first in attendance order, then guests — same order as below).
+    let fixedTeams = null;
+    const useFixed = draftFixedOn && (totalCount === 4 || totalCount === 6);
+    if (useFixed) {
+      const sel = draftFixedSel.slice(0, totalCount);
+      if (sel.some((k) => !k) || new Set(sel).size !== totalCount) {
+        showError('Föst lið: veldu tvo ólíka leikmenn í hvert lið');
+        return;
+      }
+      if (lateIndexSet.size) {
+        showError('Föst lið: taktu hakið af "seinn" — öll liðin spila frá byrjun');
+        return;
+      }
+      const pairs = sel.map((k) => (k.startsWith('r:')
+        ? attendingIds.indexOf(k.slice(2))
+        : attendingIds.length + Number(k.slice(2))));
+      fixedTeams = { pairs, mode: totalCount === 6 && fixedMode === 'winner' ? 'winner' : 'plan' };
+    }
     state.rosterIds = [...attendingIds, ...draftGuests.map(() => null)];
     state.players = [...attendingIds.map(rosterName), ...draftGuests];
     state.playerCount = totalCount;
     state.departed = Array.from({ length: totalCount }, (_, i) => lateIndexSet.has(i));
-    state.schedule = appendRounds(initialActive, [], roundCount);
-    state.results = Array(roundCount).fill(null);
+    state.fixedTeams = fixedTeams;
+    if (fixedTeams && fixedTeams.mode === 'winner') {
+      state.schedule = startWinnerStays(fixedTeamList(fixedTeams));
+    } else if (fixedTeams) {
+      state.schedule = appendFixedPlanRounds(fixedTeamList(fixedTeams), [], roundCount);
+    } else {
+      state.schedule = appendRounds(initialActive, [], roundCount);
+    }
+    state.results = Array(state.schedule.length).fill(null);
     state.finished = false;
+    draftFixedSel = draftFixedSel.map((k) => (k.startsWith('g:') ? '' : k));
     draftGuests = [];
     draftLate = new Set();
     renderGuestChips();
@@ -2240,10 +2510,18 @@
     });
   }
 
-  armWithConfirm(document.getElementById('apply-setup-btn'), 'Ertu viss? Eyðir úrslitum', doApplySetup, hasResults);
+  armWithConfirm(document.getElementById('apply-setup-btn'), 'Ertu viss? Eyðir úrslitum', () => doApplySetup('plan'), hasResults);
+  armWithConfirm(document.getElementById('fixed-plan-btn'), 'Ertu viss?', () => doApplySetup('plan'), hasResults);
+  armWithConfirm(document.getElementById('fixed-winner-btn'), 'Ertu viss?', () => doApplySetup('winner'), hasResults);
 
   armWithConfirm(document.getElementById('reshuffle-btn'), 'Ertu viss? Smelltu aftur', () => {
-    state.schedule = generateSchedule(state.playerCount, state.schedule.length);
+    if (isWinnerStays()) {
+      state.schedule = startWinnerStays(fixedTeamList(state.fixedTeams));
+    } else if (state.fixedTeams) {
+      state.schedule = appendFixedPlanRounds(fixedTeamList(state.fixedTeams), [], state.schedule.length);
+    } else {
+      state.schedule = generateSchedule(state.playerCount, state.schedule.length);
+    }
     state.results = Array(state.schedule.length).fill(null);
     state.finished = false;
     renderAll();
@@ -2270,7 +2548,9 @@
       showError(`Þarf minnst ${MIN_PLAYERS} leikmenn sem eru ekki farnir heim`);
       return;
     }
-    state.schedule = appendRounds(active, state.schedule, extra);
+    state.schedule = state.fixedTeams
+      ? appendFixedPlanRounds(fixedTeamList(state.fixedTeams), state.schedule, extra)
+      : appendRounds(active, state.schedule, extra);
     state.results = state.results.concat(Array(extra).fill(null));
     state.finished = false;
     renderAll();
@@ -2358,10 +2638,21 @@
     document.getElementById('schedule-list').lastElementChild?.scrollIntoView({ block: 'center' });
   });
 
+  // Three states: an ongoing night gets "Ljúka leik núna" (locks it
+  // read-only for everyone); a finished night gets "Breyta leikjum" to
+  // unlock corrections on this device, then "Vista" to lock it again.
   document.getElementById('finish-btn').addEventListener('click', () => {
-    state.finished = !state.finished;
-    renderAll();
-    persist();
+    if (!state.finished) {
+      state.finished = true;
+      editUnlocked = false;
+      applyWinnerStays();
+      renderAll();
+      renderSessionInfo();
+      persist();
+    } else {
+      editUnlocked = !editUnlocked;
+      renderAll();
+    }
     scrollToNext();
   });
 

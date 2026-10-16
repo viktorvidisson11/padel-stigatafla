@@ -1505,8 +1505,8 @@
       <p class="empty-hint" style="margin:0 0 10px;">Yfirlit fyrir þetta kvöld eingöngu${isCurrent ? ' (kvöldið sem er í gangi núna)' : ' — restin af síðunni fyrir neðan sýnir alltaf kvöldið sem er í gangi núna, ekki þetta'}.</p>
     `;
 
-    const rows = computeStandingsFor(sanitize(s)).sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
-    const labels = rankLabels(rows);
+    const rows = computeStandingsFor(sanitize(s)).sort(compareStandings);
+    const labels = rankLabels(rows, standingsKey);
     const standingsHtml = rows.map((r, i) => `
       <div class="lb-row">
         <div class="lb-rank">${labels[i]}</div>
@@ -2002,6 +2002,21 @@
   // the season stats tables with a rounded-percentage key so "50% (1/2)"
   // and "50% (1/2)" tie even though the sort itself breaks that tie by
   // games played.
+  // Per-night standings: most wins first; equal wins are split by win
+  // percentage (7/12 ahead of 7/14 ahead of 7/15), and only players equal
+  // on both share a rank.
+  function winPct(row) {
+    return row.played ? row.wins / row.played : 0;
+  }
+
+  function compareStandings(a, b) {
+    return b.wins - a.wins || winPct(b) - winPct(a) || a.name.localeCompare(b.name);
+  }
+
+  function standingsKey(row) {
+    return row.wins + '|' + winPct(row);
+  }
+
   function rankLabels(sorted, keyFn) {
     const key = keyFn || ((x) => x.wins);
     const labels = [];
@@ -2024,8 +2039,8 @@
       return;
     }
     const maxWins = Math.max(1, ...rows.map((r) => r.wins));
-    const sorted = [...rows].sort((a, b) => b.wins - a.wins || a.name.localeCompare(b.name));
-    const labels = rankLabels(sorted);
+    const sorted = [...rows].sort(compareStandings);
+    const labels = rankLabels(sorted, standingsKey);
     box.innerHTML = sorted.map((row, idx) => `
       <div class="lb-row ${labels[idx] === labels[0] && row.wins > 0 ? 'first' : ''}">
         <div class="lb-rank">${labels[idx]}</div>

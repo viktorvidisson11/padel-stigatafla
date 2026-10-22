@@ -1626,13 +1626,24 @@
 
   let rosterCache = [];
 
+  function setRosterFromSnap(snap) {
+    rosterCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  // A Firestore listener that errors is closed for good — e.g. a tab
+  // opened while security rules were being updated got one
+  // permission-denied and then showed every name as "??" until reloaded.
+  // Retry instead, so it recovers on its own.
   function subscribeRoster() {
     if (!db) return;
     onSnapshot(collection(db, 'roster'), (snap) => {
-      rosterCache = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
+      setRosterFromSnap(snap);
       renderRosterChecklist();
       renderFreeRiders();
-    }, (err) => showError('Leikmannahópur: ' + (err && err.code ? err.code : 'óþekkt villa')));
+    }, (err) => {
+      showError('Leikmannahópur: ' + (err && err.code ? err.code : 'óþekkt villa'));
+      setTimeout(subscribeRoster, 5000);
+    });
   }
 
   function rosterName(id) {
@@ -1650,6 +1661,9 @@
   // ranking hides (e.g. a bottom-of-the-table player who nonetheless
   // has your number).
   async function computeSeasonStats() {
+    // Names come from the roster; if it hasn't loaded yet, fetch it now
+    // rather than render the whole table as "??".
+    if (!rosterCache.length) setRosterFromSnap(await getDocs(collection(db, 'roster')));
     const snap = await getDocs(collection(db, 'sessions'));
     const playerAgg = {};
     const pairAgg = {};

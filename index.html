@@ -2370,7 +2370,7 @@
     // the current team count).
     const valid = new Set(options.map((o) => o.key));
     draftFixedSel = draftFixedSel.map((k, i) => (i < count && valid.has(k) ? k : ''));
-    let html = '';
+    let html = '<button class="btn" id="random-teams-btn" type="button" style="width:100%;margin:10px 0 4px;">🎲 Random lið</button>';
     for (let t = 0; t < teamCount; t++) {
       html += `<div class="fixed-team-row"><span class="setup-label">Lið ${t + 1}</span>`;
       for (let j = 0; j < 2; j++) {
@@ -2389,6 +2389,17 @@
         draftFixedSel[Number(sel.dataset.slot)] = sel.value;
         renderFixedTeams();
       });
+    });
+    // Fills every slot with tonight's players in random order (Fisher-Yates);
+    // tap again for a new draw, or adjust single dropdowns afterwards.
+    document.getElementById('random-teams-btn').addEventListener('click', () => {
+      const keys = options.map((o) => o.key);
+      for (let i = keys.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [keys[i], keys[j]] = [keys[j], keys[i]];
+      }
+      draftFixedSel = keys.concat(Array(6).fill('')).slice(0, 6);
+      renderFixedTeams();
     });
   }
 

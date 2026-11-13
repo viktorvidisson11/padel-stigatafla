@@ -1775,7 +1775,7 @@
   // use the average position ("3.-4." counts as 3.5). Ranks come from the
   // current season table, so old games re-score as the table moves.
   // Guests have no season rank and count as the middle rank.
-  // Only won games score; averaged per night played.
+  // Only won games score; ranked by average per game played.
   // `excludeId` ("Án Hödda"): games where a player had that player as a
   // partner don't count for them at all — no points, and not counted in
   // their games or nights — and that player is left out of the table.
@@ -1814,7 +1814,7 @@
       games: v.games,
       perNight: v.points / v.nights.size,
       perGame: v.points / v.games,
-    })).sort((a, b) => b.perNight - a.perNight || b.points - a.points);
+    })).sort((a, b) => b.perGame - a.perGame || b.points - a.points);
   }
 
   let pointsWithoutHoddi = false;
@@ -1914,9 +1914,9 @@
     const hoddiId = hoddiRosterId();
     const pointRows = computeSeasonPoints(playerRows, playerLabels, games || [],
       pointsWithoutHoddi && hoddiId ? hoddiId : null);
-    const pointLabels = rankLabels(pointRows, (x) => Math.round(x.perNight * 10));
+    const pointLabels = rankLabels(pointRows, (x) => Math.round(x.perGame * 10));
     const pointsHtml = pointRows.length ? `
-      <h3 class="stats-subhead">Stig — meðaltal per kvöld</h3>
+      <h3 class="stats-subhead">Stig — meðaltal per leik</h3>
       <p class="empty-hint" style="margin:0 0 6px;">Bara unnir leikir gefa stig: sæti meðspilara + (${playerRows.length + 1} − sæti) fyrir hvern mótspilara.${pointsWithoutHoddi ? ' Án Hödda: leikir með Hödda í liði telja ekki.' : ''}</p>
       ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''}" id="points-no-hoddi-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;margin-bottom:6px;">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
       ${pointRows.map((p, i) => `
@@ -1924,7 +1924,7 @@
           <div class="lb-rank">${pointLabels[i]}</div>
           <div class="lb-name">${escapeHtml(p.name)}</div>
           <div></div>
-          <div class="lb-record">${fmt1(p.perNight)}&nbsp;/&nbsp;kvöld <span style="opacity:.6">(${fmt1(p.points)} stig, ${fmt1(p.perGame)}/leik)</span></div>
+          <div class="lb-record">${fmt1(p.perGame)}&nbsp;/&nbsp;leik <span style="opacity:.6">(${fmt1(p.points)} stig, ${fmt1(p.perNight)}/kvöld)</span></div>
         </div>
       `).join('')}
     ` : '';

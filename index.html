@@ -1776,7 +1776,10 @@
   // current season table, so old games re-score as the table moves.
   // Guests have no season rank and count as the middle rank.
   // Only won games score; averaged per night played.
-  function computeSeasonPoints(playerRows, labels, games) {
+  // `excludeId` ("Án Hödda"): games where a player had that player as a
+  // partner don't count for them at all — no points, and not counted in
+  // their games or nights — and that player is left out of the table.
+  function computeSeasonPoints(playerRows, labels, games, excludeId) {
     const n = playerRows.length;
     const rank = {};
     playerRows.forEach((p, i) => {
@@ -1785,15 +1788,20 @@
     });
     const rankOf = (id) => (id && rank[id] !== undefined ? rank[id] : (n + 1) / 2);
     const agg = {};
+    const partnerOf = (g, id) => {
+      const team = g.winners.includes(id) ? g.winners : g.losers;
+      return team[0] === id ? team[1] : team[0];
+    };
+    const counts = (g, id) => !excludeId || (id !== excludeId && partnerOf(g, id) !== excludeId);
     games.forEach((g) => {
       [...g.winners, ...g.losers].forEach((id) => {
-        if (!id || rank[id] === undefined) return;
+        if (!id || rank[id] === undefined || !counts(g, id)) return;
         if (!agg[id]) agg[id] = { points: 0, games: 0, nights: new Set() };
         agg[id].games += 1;
         agg[id].nights.add(g.session);
       });
       g.winners.forEach((id, k) => {
-        if (!id || !agg[id]) return;
+        if (!id || !agg[id] || !counts(g, id)) return;
         const partner = g.winners[1 - k];
         agg[id].points += rankOf(partner)
           + g.losers.reduce((sum, opp) => sum + (n + 1 - rankOf(opp)), 0);
@@ -1809,7 +1817,12 @@
     })).sort((a, b) => b.perNight - a.perNight || b.points - a.points);
   }
 
-  function renderSeasonStats({ playerAgg, pairAgg, nemesis, freeRiderAgg, games }) {
+  let pointsWithoutHoddi = false;
+  let lastSeasonAgg = null;
+
+  function renderSeasonStats(seasonAgg) {
+    lastSeasonAgg = seasonAgg;
+    const { playerAgg, pairAgg, nemesis, freeRiderAgg, games } = seasonAgg;
     const box = document.getElementById('stats-content');
     box.hidden = false;
 
@@ -1898,11 +1911,14 @@
     const pctKey = (x) => Math.round(x.pct * 100);
     const playerLabels = rankLabels(playerRows, pctKey);
     const fmt1 = (x) => (Math.round(x * 10) / 10).toLocaleString('is-IS');
-    const pointRows = computeSeasonPoints(playerRows, playerLabels, games || []);
+    const hoddiId = hoddiRosterId();
+    const pointRows = computeSeasonPoints(playerRows, playerLabels, games || [],
+      pointsWithoutHoddi && hoddiId ? hoddiId : null);
     const pointLabels = rankLabels(pointRows, (x) => Math.round(x.perNight * 10));
     const pointsHtml = pointRows.length ? `
       <h3 class="stats-subhead">Stig — meðaltal per kvöld</h3>
-      <p class="empty-hint" style="margin:0 0 6px;">Bara unnir leikir gefa stig: sæti meðspilara + (${playerRows.length + 1} − sæti) fyrir hvern mótspilara.</p>
+      <p class="empty-hint" style="margin:0 0 6px;">Bara unnir leikir gefa stig: sæti meðspilara + (${playerRows.length + 1} − sæti) fyrir hvern mótspilara.${pointsWithoutHoddi ? ' Án Hödda: leikir með Hödda í liði telja ekki.' : ''}</p>
+      ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''}" id="points-no-hoddi-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;margin-bottom:6px;">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
       ${pointRows.map((p, i) => `
         <div class="lb-row ${pointLabels[i] === pointLabels[0] ? 'first' : ''}">
           <div class="lb-rank">${pointLabels[i]}</div>
@@ -1975,6 +1991,13 @@
 
       ${freeRidersHtml}
     `;
+    const noHoddiBtn = document.getElementById('points-no-hoddi-btn');
+    if (noHoddiBtn) {
+      noHoddiBtn.addEventListener('click', () => {
+        pointsWithoutHoddi = !pointsWithoutHoddi;
+        renderSeasonStats(lastSeasonAgg);
+      });
+    }
   }
 
   document.getElementById('load-stats-btn').addEventListener('click', async () => {

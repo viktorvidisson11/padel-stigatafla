@@ -398,6 +398,15 @@
     white-space: nowrap;
   }
 
+  .lb-row.pts { grid-template-columns: 44px 1fr auto; }
+  .lb-row.pts .lb-rank { justify-self: start; }
+  .lb-row.pts .lb-record { white-space: nowrap; text-align: right; font-size: 0.95rem; color: var(--ink); font-weight: 600; }
+  .lb-row.pts .lb-record small { font-size: 0.72rem; color: var(--muted); font-weight: 400; }
+  .lb-sub { display: block; font-size: 0.74rem; font-weight: 400; color: var(--muted); margin-top: 1px; }
+  .pts-head { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; }
+  .pts-head .empty-hint { margin: 0; flex: 1; font-size: 0.78rem; }
+  .pts-head .btn { flex: none; padding: 6px 10px; font-size: 0.78rem; white-space: nowrap; }
+
   .lb-record {
     font-variant-numeric: tabular-nums;
     color: var(--muted);
@@ -1896,14 +1905,15 @@
     const labels = rankLabels(rows, (x) => Math.round(x.perGame * 10));
     const hoddiId = hoddiRosterId();
     return `
-      <p class="empty-hint" style="margin:0 0 6px;">Sama stigagjöf og í tölfræði tímabilsins (sæti úr tímabilstöflunni), bara leikir þessa kvölds.${pointsWithoutHoddi ? ' Án Hödda: leikir með Hödda í liði telja ekki.' : ''}</p>
-      ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''} night-no-hoddi-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;margin-bottom:6px;">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
+      <div class="pts-head">
+        <p class="empty-hint">Sæti úr tímabilstöflunni, bara leikir kvöldsins.${pointsWithoutHoddi ? ' Leikir með Hödda telja ekki.' : ''}</p>
+        ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''} night-no-hoddi-btn" type="button">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
+      </div>
       ${rows.map((p, i) => `
-        <div class="lb-row ${labels[i] === labels[0] ? 'first' : ''}">
+        <div class="lb-row pts ${labels[i] === labels[0] ? 'first' : ''}">
           <div class="lb-rank">${labels[i]}</div>
-          <div class="lb-name">${escapeHtml(p.name)}</div>
-          <div></div>
-          <div class="lb-record">${fmt1(p.perGame)}&nbsp;/&nbsp;leik <span style="opacity:.6">(${fmt1(p.points)} stig, ${p.games} leikir)</span></div>
+          <div class="lb-name">${escapeHtml(p.name)}<span class="lb-sub">${fmt1(p.points)} stig · ${p.games} leikir</span></div>
+          <div class="lb-record">${fmt1(p.perGame)} <small>/ leik</small></div>
         </div>
       `).join('')}
     `;
@@ -2029,14 +2039,15 @@
     const pointLabels = rankLabels(pointRows, (x) => Math.round(x.perGame * 10));
     const pointsHtml = pointRows.length ? `
       <h3 class="stats-subhead">Stig — meðaltal per leik</h3>
-      <p class="empty-hint" style="margin:0 0 6px;">Bara unnir leikir gefa stig: sæti meðspilara + (${playerRows.length + 1} − sæti) fyrir hvern mótspilara.${pointsWithoutHoddi ? ' Án Hödda: leikir með Hödda í liði telja ekki.' : ''}</p>
-      ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''}" id="points-no-hoddi-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;margin-bottom:6px;">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
+      <div class="pts-head">
+        <p class="empty-hint">Bara unnir leikir: sæti meðspilara + (${playerRows.length + 1} − sæti) per mótspilara.${pointsWithoutHoddi ? ' Leikir með Hödda telja ekki.' : ''}</p>
+        ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''}" id="points-no-hoddi-btn" type="button">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
+      </div>
       ${pointRows.map((p, i) => `
-        <div class="lb-row ${pointLabels[i] === pointLabels[0] ? 'first' : ''}">
+        <div class="lb-row pts ${pointLabels[i] === pointLabels[0] ? 'first' : ''}">
           <div class="lb-rank">${pointLabels[i]}</div>
-          <div class="lb-name">${escapeHtml(p.name)}</div>
-          <div></div>
-          <div class="lb-record">${fmt1(p.perGame)}&nbsp;/&nbsp;leik <span style="opacity:.6">(${fmt1(p.points)} stig, ${fmt1(p.perNight)}/kvöld)</span></div>
+          <div class="lb-name">${escapeHtml(p.name)}<span class="lb-sub">${fmt1(p.points)} stig · ${fmt1(p.perNight)}/kvöld</span></div>
+          <div class="lb-record">${fmt1(p.perGame)} <small>/ leik</small></div>
         </div>
       `).join('')}
     ` : '';

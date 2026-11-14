@@ -845,6 +845,11 @@
     <div class="leaderboard" id="free-riders-list"></div>
   </section>
 
+  <section class="card" id="night-points-card" hidden>
+    <h2 class="label" id="night-points-heading">Stig</h2>
+    <div class="leaderboard" id="night-points-list"></div>
+  </section>
+
   <section class="card">
     <h2 class="label" id="schedule-heading">Allt planið</h2>
     <div class="schedule-list" id="schedule-list"></div>
@@ -1426,6 +1431,8 @@
     if (scheduleH) scheduleH.textContent = 'Allt planið' + label;
     const freeRidersH = document.getElementById('free-riders-heading');
     if (freeRidersH) freeRidersH.textContent = 'Free riders' + label;
+    const pointsH = document.getElementById('night-points-heading');
+    if (pointsH) pointsH.textContent = 'Stig' + label;
   }
 
   let historySessionsCache = [];
@@ -1564,7 +1571,13 @@
         </div>
       `;
 
-    box.innerHTML = headingHtml + standingsHtml + freeRidersHtml + deleteHtml;
+    if (!seasonRankCache) ensureSeasonRanks(seasonRankKey);
+    const npRows = isNightOver(sanitized) ? nightPointsFor(sanitized) : null;
+    const nightPtsHtml = npRows && npRows.length
+      ? `<h2 class="label" style="margin-top:16px;">Stig</h2>${nightPointsHtml(npRows)}` : '';
+
+    box.innerHTML = headingHtml + standingsHtml + freeRidersHtml + nightPtsHtml + deleteHtml;
+    wireNoHoddiButtons(box);
 
     if (!isCurrent) {
       const reasonInput = document.getElementById('delete-reason');
@@ -1820,6 +1833,108 @@
   let pointsWithoutHoddi = false;
   let lastSeasonAgg = null;
 
+  // Season table rows + rank labels, the ranking every "Stig" calculation
+  // scores against.
+  function seasonRanking(playerAgg) {
+    const rows = Object.entries(playerAgg)
+      .filter(([, v]) => v.played > 0)
+      .map(([id, v]) => ({ id, name: rosterName(id), wins: v.wins, played: v.played, pct: v.wins / v.played }))
+      .sort((a, b) => b.pct - a.pct || b.wins - a.wins);
+    return { rows, labels: rankLabels(rows, (x) => Math.round(x.pct * 100)) };
+  }
+
+  // Per-night "Stig": same formula and same season ranks as the season
+  // table, but only that night's games. The season ranking needs every
+  // session, so it's fetched in the background and re-fetched whenever
+  // the current night's results change.
+  let seasonRankCache = null;
+  let seasonRankKey = null;
+  let seasonRankLoading = false;
+  let seasonRankFailedAt = 0;
+
+  function nightGamesFor(s) {
+    const games = [];
+    if (!Array.isArray(s.rosterIds)) return games;
+    s.schedule.forEach((r, i) => {
+      const result = s.results[i];
+      if (result !== 'A' && result !== 'B') return;
+      const teamA = r.teamA.map((idx) => s.rosterIds[idx] || null);
+      const teamB = r.teamB.map((idx) => s.rosterIds[idx] || null);
+      games.push({ session: 'night', winners: result === 'A' ? teamA : teamB, losers: result === 'A' ? teamB : teamA });
+    });
+    return games;
+  }
+
+  function nightPointsFor(s) {
+    if (!seasonRankCache) return null;
+    const hoddiId = hoddiRosterId();
+    return computeSeasonPoints(seasonRankCache.rows, seasonRankCache.labels, nightGamesFor(s),
+      pointsWithoutHoddi && hoddiId ? hoddiId : null);
+  }
+
+  async function ensureSeasonRanks(key) {
+    if (!db || seasonRankLoading || (seasonRankCache && seasonRankKey === key)) return;
+    if (Date.now() - seasonRankFailedAt < 30000) return;
+    seasonRankLoading = true;
+    try {
+      const agg = await computeSeasonStats();
+      seasonRankCache = seasonRanking(agg.playerAgg);
+      seasonRankKey = key;
+    } catch (e) {
+      seasonRankFailedAt = Date.now(); // card stays as-is; retried later
+      return;
+    } finally {
+      seasonRankLoading = false;
+    }
+    renderNightPoints();
+    const sel = document.getElementById('history-select');
+    if (sel && sel.value && !document.getElementById('history-list').hidden) sel.dispatchEvent(new Event('change'));
+  }
+
+  function nightPointsHtml(rows) {
+    const fmt1 = (x) => (Math.round(x * 10) / 10).toLocaleString('is-IS');
+    const labels = rankLabels(rows, (x) => Math.round(x.perGame * 10));
+    const hoddiId = hoddiRosterId();
+    return `
+      <p class="empty-hint" style="margin:0 0 6px;">Sama stigagjöf og í tölfræði tímabilsins (sæti úr tímabilstöflunni), bara leikir þessa kvölds.${pointsWithoutHoddi ? ' Án Hödda: leikir með Hödda í liði telja ekki.' : ''}</p>
+      ${hoddiId ? `<button class="btn ${pointsWithoutHoddi ? 'reshuffle' : ''} night-no-hoddi-btn" type="button" style="flex:none;padding:6px 10px;font-size:0.78rem;margin-bottom:6px;">Án Hödda${pointsWithoutHoddi ? ' ✓' : ''}</button>` : ''}
+      ${rows.map((p, i) => `
+        <div class="lb-row ${labels[i] === labels[0] ? 'first' : ''}">
+          <div class="lb-rank">${labels[i]}</div>
+          <div class="lb-name">${escapeHtml(p.name)}</div>
+          <div></div>
+          <div class="lb-record">${fmt1(p.perGame)}&nbsp;/&nbsp;leik <span style="opacity:.6">(${fmt1(p.points)} stig, ${p.games} leikir)</span></div>
+        </div>
+      `).join('')}
+    `;
+  }
+
+  function toggleNoHoddi() {
+    pointsWithoutHoddi = !pointsWithoutHoddi;
+    renderNightPoints();
+    if (lastSeasonAgg && !document.getElementById('stats-content').hidden) renderSeasonStats(lastSeasonAgg);
+    const sel = document.getElementById('history-select');
+    if (sel && sel.value) sel.dispatchEvent(new Event('change'));
+  }
+
+  function wireNoHoddiButtons(root) {
+    root.querySelectorAll('.night-no-hoddi-btn').forEach((b) => b.addEventListener('click', toggleNoHoddi));
+  }
+
+  function renderNightPoints() {
+    const card = document.getElementById('night-points-card');
+    if (!card) return;
+    if (!isNightOver(state) || !state.schedule.length) { card.hidden = true; return; }
+    const key = `${currentSessionId}|${state.results.join(',')}`;
+    if (!seasonRankCache || seasonRankKey !== key) ensureSeasonRanks(key);
+    const rows = nightPointsFor(state);
+    if (!rows || !rows.length) { card.hidden = true; return; }
+    card.hidden = false;
+    const list = document.getElementById('night-points-list');
+    list.innerHTML = nightPointsHtml(rows);
+    wireNoHoddiButtons(list);
+  }
+
   function renderSeasonStats(seasonAgg) {
     lastSeasonAgg = seasonAgg;
     const { playerAgg, pairAgg, nemesis, freeRiderAgg, games } = seasonAgg;
@@ -1829,10 +1944,7 @@
     // Equal win rate is broken by whoever has actually won more games — a
     // 2/2 record shouldn't rank below a 1/1 record just because they tie
     // on percentage.
-    const playerRows = Object.entries(playerAgg)
-      .filter(([, v]) => v.played > 0)
-      .map(([id, v]) => ({ id, name: rosterName(id), wins: v.wins, played: v.played, pct: v.wins / v.played }))
-      .sort((a, b) => b.pct - a.pct || b.wins - a.wins);
+    const playerRows = seasonRanking(playerAgg).rows;
 
     const pairRows = Object.values(pairAgg)
       .map((v) => ({ names: `${rosterName(v.a)} & ${rosterName(v.b)}`, wins: v.wins, played: v.played, pct: v.wins / v.played }))
@@ -1993,10 +2105,7 @@
     `;
     const noHoddiBtn = document.getElementById('points-no-hoddi-btn');
     if (noHoddiBtn) {
-      noHoddiBtn.addEventListener('click', () => {
-        pointsWithoutHoddi = !pointsWithoutHoddi;
-        renderSeasonStats(lastSeasonAgg);
-      });
+      noHoddiBtn.addEventListener('click', toggleNoHoddi);
     }
   }
 
@@ -2379,6 +2488,7 @@
     renderNext();
     renderStandings();
     renderFreeRiders();
+    renderNightPoints();
     renderSchedule();
     renderFinishButton();
     renderDepartedChecklist();
